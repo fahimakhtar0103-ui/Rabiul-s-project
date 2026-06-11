@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react';
-import { Search, Save, Download, FileSpreadsheet, Lock } from 'lucide-react';
+import { Search, Save, Download, FileSpreadsheet, AlertTriangle, CheckCircle2 } from 'lucide-react';
 import { supabase } from '../lib/supabase';
 
 export function Settlement() {
@@ -9,6 +9,8 @@ export function Settlement() {
   const today = new Date();
   const [selectedMonth, setSelectedMonth] = useState(today.toISOString().slice(0, 7)); // YYYY-MM
   const [loading, setLoading] = useState(false);
+  const [dbError, setDbError] = useState(false);
+  const [saveStatus, setSaveStatus] = useState<{saving: boolean, message: string, type: 'success' | 'error' | null}>({ saving: false, message: '', type: null });
 
   useEffect(() => {
     fetchSettlement();
@@ -16,68 +18,49 @@ export function Settlement() {
 
   const fetchSettlement = async () => {
     setLoading(true);
+    setDbError(false);
+    setSaveStatus({ saving: false, message: '', type: null });
+    
     try {
-      const year = parseInt(selectedMonth.split('-')[0]);
-      const month = selectedMonth.split('-')[1];
-      const currentMonthDateStr = `${year}-${month}-01`;
-
       const laboursRes = await supabase.from('labour').select('*, site(*)').eq('is_archived', false).order('id', { ascending: false });
-      const attendanceRes = await supabase.from('attendance').select('*');
-      const paymentRes = await supabase.from('payment').select('*');
-      const deductionRes = await supabase.from('deduction').select('*');
-
+      if (laboursRes.error) throw laboursRes.error;
+      
       const labours = laboursRes.data || [];
+      
+      const entriesRes = await supabase.from('monthly_entries').select('*').eq('month', selectedMonth);
+      
+      if (entriesRes.error) {
+        if (entriesRes.error.code === '42P01') {
+          // Table doesn't exist
+          setDbError(true);
+          setLoading(false);
+          return;
+        }
+        throw entriesRes.error;
+      }
+      
+      const entries = entriesRes.data || [];
+
       const settlementData = labours.map((labour: any) => {
-        // Current month
-        const currentAttendance = (attendanceRes.data || []).find(a => a.labourId === labour.id && a.year === year && a.month.toString().padStart(2, '0') === month);
-        const currentDays = currentAttendance ? Number(currentAttendance.days) : 0;
+        const entry = entries.find(e => e.labourId === labour.id) || {};
         
-        const currentPayments = (paymentRes.data || []).filter(p => p.labourId === labour.id && p.point_date.toString().startsWith(selectedMonth));
-        const currentDeductions = (deductionRes.data || []).filter(d => d.labourId === labour.id && d.point_date.toString().startsWith(selectedMonth));
-
-        const paymentsMade = currentPayments.reduce((sum, p) => sum + Number(p.amount), 0);
-        
-        let ration = 0, pocketMoney = 0, otherDeductions = 0;
-        currentDeductions.forEach(d => {
-          const reason = (d.reason || '').toLowerCase();
-          if (reason.includes('ration')) ration += Number(d.amount);
-          else if (reason.includes('pocket')) pocketMoney += Number(d.amount);
-          else otherDeductions += Number(d.amount);
-        });
-
-        // Previous due
-        const prevAttendance = (attendanceRes.data || []).filter(a => {
-          const aDate = `${a.year}-${a.month.toString().padStart(2, '0')}-01`;
-          return aDate < currentMonthDateStr;
-        });
-        const prevPayments = (paymentRes.data || []).filter(p => p.point_date.toString() < currentMonthDateStr && p.labourId === labour.id);
-        const prevDeductions = (deductionRes.data || []).filter(d => d.point_date.toString() < currentMonthDateStr && d.labourId === labour.id);
-
-        // prevGross should only be for this labour!
-        const myPrevAttendance = prevAttendance.filter(a => a.labourId === labour.id);
-        const prevGross = myPrevAttendance.reduce((sum, a) => sum + (Number(a.days) * Number(labour.dailyRate)), 0);
-        const prevPaid = prevPayments.reduce((sum, p) => sum + Number(p.amount), 0);
-        const prevDeducted = prevDeductions.reduce((sum, d) => sum + Number(d.amount), 0);
-
-        const previousDue = prevGross - prevPaid - prevDeducted;
-
         return {
           id: labour.id,
           name: labour.name,
           displayId: labour.idNumber || 'NO ID',
           site: labour.site ? labour.site.name : 'Unassigned',
-          dailyRate: Number(labour.dailyRate),
-          previousDue,
-          presentDays: currentDays,
-          ration,
-          pocketMoney,
-          otherDeductions,
-          paymentsMade
+          dailyRate: entry.daily_rate !== undefined ? Number(entry.daily_rate) : Number(labour.dailyRate),
+          attendance_days: entry.attendance_days || 0,
+          ration: entry.ration || 0,
+          pocket_money: entry.pocket_money || 0,
+          other_deduction: entry.other_deduction || 0,
+          payments_made: entry.payments_made || 0,
+          _entryId: entry.id || null
         };
       });
 
       setWorkers(settlementData);
-    } catch (err) {
+    } catch (err: any) {
       console.error(err);
     } finally {
       setLoading(false);
@@ -89,39 +72,45 @@ export function Settlement() {
   };
 
   const handleSave = async () => {
+    if (dbError) return;
+    setSaveStatus({ saving: true, message: 'Saving entries...', type: null });
+    
     try {
-      const year = parseInt(selectedMonth.split('-')[0]);
-      const month = selectedMonth.split('-')[1];
-      const point_date = `${year}-${month}-28`;
-
       for (const w of workers) {
-        if (w.presentDays > 0 || String(w.presentDays) === "0") {
-          // Upsert attendance
-          const existingAtt = await supabase.from('attendance').select('id').eq('labourId', w.id).eq('year', year).eq('month', month).single();
-          if (existingAtt.data) {
-            await supabase.from('attendance').update({ days: w.presentDays }).eq('id', existingAtt.data.id);
-          } else {
-            await supabase.from('attendance').insert([{ labourId: w.id, month, year, days: w.presentDays }]);
-          }
-        }
+        const grossSalary = Number(w.dailyRate) * Number(w.attendance_days);
+        const totalDeductions = Number(w.ration) + Number(w.pocket_money) + Number(w.other_deduction);
+        const netSalary = grossSalary - totalDeductions;
+        
+        const payload = {
+          labourId: w.id,
+          month: selectedMonth,
+          attendance_days: w.attendance_days,
+          daily_rate: w.dailyRate,
+          ration: w.ration,
+          pocket_money: w.pocket_money,
+          other_deduction: w.other_deduction,
+          gross_salary: grossSalary,
+          total_deductions: totalDeductions,
+          net_salary: netSalary,
+          payments_made: w.payments_made
+        };
 
-        // Clean existing ones generated by settlement bulk for this month
-        await supabase.from('deduction').delete().eq('labourId', w.id).like('point_date', `${selectedMonth}%`);
-        if (w.ration > 0) await supabase.from('deduction').insert([{ labourId: w.id, point_date, amount: w.ration, reason: 'Ration' }]);
-        if (w.pocketMoney > 0) await supabase.from('deduction').insert([{ labourId: w.id, point_date, amount: w.pocketMoney, reason: 'Pocket Money' }]);
-        if (w.otherDeductions > 0) await supabase.from('deduction').insert([{ labourId: w.id, point_date, amount: w.otherDeductions, reason: 'Other' }]);
-
-        await supabase.from('payment').delete().eq('labourId', w.id).like('point_date', `${selectedMonth}%`).eq('notes', 'Bulk Settlement');
-        if (w.paymentsMade > 0) {
-          await supabase.from('payment').insert([{ labourId: w.id, point_date, amount: w.paymentsMade, mode: 'Cash', notes: 'Bulk Settlement' }]);
+        if (w._entryId) {
+          await supabase.from('monthly_entries').update(payload).eq('id', w._entryId);
+        } else {
+          // If all default 0, skip insert to save space unless explicitly populated? 
+          // We can just insert it
+          const { data } = await supabase.from('monthly_entries').insert([payload]).select().single();
+          if (data) w._entryId = data.id;
         }
       }
 
-      alert("Settlement data saved successfully for " + selectedMonth);
-      fetchSettlement();
+      setSaveStatus({ saving: false, message: 'Settlement saved successfully.', type: 'success' });
+      // Clear success message after 3 seconds
+      setTimeout(() => setSaveStatus({ saving: false, message: '', type: null }), 3000);
     } catch (err) {
       console.error(err);
-      alert("Network or database error.");
+      setSaveStatus({ saving: false, message: 'Database error while saving.', type: 'error' });
     }
   };
 
@@ -129,10 +118,39 @@ export function Settlement() {
 
   return (
     <div className="pb-24 px-4 pt-4 w-full mx-auto space-y-4">
+      {dbError && (
+        <div className="bg-error/10 border border-error/50 rounded-lg p-4 text-sm text-error mb-4">
+          <div className="flex items-center gap-2 font-bold mb-2">
+            <AlertTriangle className="w-5 h-5" /> Action Required: Database Table Missing
+          </div>
+          <p className="mb-2">The <strong>monthly_entries</strong> table does not exist. Please run the following SQL command in your Supabase Dashboard SQL editor:</p>
+          <pre className="bg-surface-bright border border-error/20 p-3 rounded text-xs overflow-x-auto selection:bg-error/20">
+{`CREATE TABLE monthly_entries (
+  id SERIAL PRIMARY KEY,
+  "labourId" INTEGER REFERENCES labour(id) ON DELETE CASCADE,
+  month VARCHAR(7) NOT NULL,
+  attendance_days NUMERIC(10, 2) DEFAULT 0,
+  daily_rate NUMERIC(10, 2) DEFAULT 0,
+  ration NUMERIC(10, 2) DEFAULT 0,
+  pocket_money NUMERIC(10, 2) DEFAULT 0,
+  other_deduction NUMERIC(10, 2) DEFAULT 0,
+  gross_salary NUMERIC(10, 2) DEFAULT 0,
+  total_deductions NUMERIC(10, 2) DEFAULT 0,
+  net_salary NUMERIC(10, 2) DEFAULT 0,
+  payments_made NUMERIC(10, 2) DEFAULT 0,
+  UNIQUE("labourId", month)
+);`}
+          </pre>
+          <button onClick={fetchSettlement} className="mt-3 bg-error text-white px-4 py-1.5 rounded text-xs font-bold hover:bg-error/90">
+            I have created the table. Retry.
+          </button>
+        </div>
+      )}
+
       <div className="bg-surface-bright rounded-lg shadow-sm border border-outline-variant p-4">
         <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4">
           <div>
-            <h2 className="text-xl font-bold text-on-surface tracking-tight">Monthly Labour Settlement</h2>
+            <h2 className="text-xl font-bold text-on-surface tracking-tight">Monthly Settlement</h2>
             <div className="flex items-center gap-2 mt-2">
               <input 
                 type="month" 
@@ -145,11 +163,17 @@ export function Settlement() {
           </div>
           
           <div className="flex flex-wrap items-center gap-2 w-full md:w-auto">
-            <button onClick={() => window.print()} className="flex-1 md:flex-none justify-center bg-surface-container hover:bg-surface-container-high text-on-surface px-4 py-2 border border-outline-variant/50 rounded-md font-semibold flex items-center gap-2 shadow-sm transition-all text-xs">
+            {saveStatus.message && (
+              <span className={`text-xs font-bold flex items-center gap-1 px-2 py-1 rounded ${saveStatus.type === 'success' ? 'bg-success/10 text-success' : saveStatus.type === 'error' ? 'bg-error/10 text-error' : 'text-on-surface-variant'}`}>
+                 {saveStatus.type === 'success' && <CheckCircle2 className="w-3 h-3" />}
+                 {saveStatus.message}
+              </span>
+            )}
+            <button onClick={() => window.print()} className="flex-1 md:flex-none justify-center bg-surface-container hover:bg-surface-container-high text-on-surface px-4 py-2 border border-outline-variant/50 rounded-md font-semibold flex items-center gap-2 shadow-sm transition-all text-xs" disabled={dbError || saveStatus.saving}>
               <FileSpreadsheet className="w-4 h-4 text-success" /> Export Excel
             </button>
-            <button onClick={handleSave} className="flex-1 md:flex-none justify-center bg-primary hover:bg-primary/90 text-white px-4 py-2 rounded-md font-semibold flex items-center gap-2 shadow-sm transition-all text-xs border border-transparent">
-              <Save className="w-4 h-4" /> Save All
+            <button onClick={handleSave} className="flex-1 md:flex-none justify-center bg-primary hover:bg-primary/90 text-white px-4 py-2 rounded-md font-semibold flex items-center gap-2 shadow-sm transition-all text-xs border border-transparent disabled:opacity-50" disabled={dbError || saveStatus.saving || loading}>
+              <Save className="w-4 h-4" /> {saveStatus.saving ? 'Saving...' : 'Save All'}
             </button>
           </div>
         </div>
@@ -166,127 +190,126 @@ export function Settlement() {
         </div>
       </div>
 
-      <div className="bg-surface-bright border border-outline-variant rounded-lg shadow-sm overflow-hidden flex flex-col w-full relative">
-        <div className="overflow-x-auto no-scrollbar relative w-full touch-pan-x">
-          {loading ? (
-             <div className="p-8 text-center text-sm font-medium text-on-surface-variant">Loading data...</div>
-          ) : (
-             <table className="text-left border-collapse w-full min-w-[1100px]">
-               <thead className="bg-surface-container-low border-b-2 border-outline-variant text-[10px] uppercase">
-                <tr>
-                  <th className="p-3 font-semibold text-on-surface-variant border-r border-outline-variant/50 sticky left-0 bg-surface-container-low z-20 shadow-[2px_0_5px_rgba(0,0,0,0.02)] min-w-[160px]">Labour Details</th>
-                  <th className="p-3 font-semibold text-on-surface-variant border-r border-outline-variant/50 text-right w-24">Prev Due</th>
-                  <th className="p-3 font-semibold text-primary border-r border-outline-variant/50 text-center w-28 bg-primary/5">Att. Days</th>
-                  <th className="p-3 font-semibold text-on-surface-variant border-r border-outline-variant/50 text-right w-24">Daily Rate</th>
-                  <th className="p-3 font-semibold text-on-surface-variant border-r border-outline-variant/50 text-right w-24 bg-surface-container-low/50">Gross Salary</th>
-                  <th className="p-3 font-semibold text-error border-r border-outline-variant/50 text-center w-56 bg-error/5">
-                    Deductions<br/><span className="lowercase text-[9px] font-medium tracking-normal">(Ration, Pocket, Other)</span>
-                  </th>
-                  <th className="p-3 font-semibold border-r border-outline-variant/50 text-right w-24">Net Salary</th>
-                  <th className="p-3 font-semibold text-success border-r border-outline-variant/50 text-center w-32 bg-success/5">Payments Made</th>
-                  <th className="p-3 font-bold text-inverse-surface bg-inverse-surface/5 text-right w-28">
-                    Net Payable<br/><span className="lowercase text-[9px] font-medium tracking-normal">(Closing Due)</span>
-                  </th>
-                </tr>
-              </thead>
-              <tbody className="divide-y divide-outline-variant font-medium text-sm">
-                {filteredWorkers.map((w) => {
-                  const grossSalary = w.dailyRate * (w.presentDays || 0);
-                  const totalDeductions = (w.ration || 0) + (w.pocketMoney || 0) + (w.otherDeductions || 0);
-                  const netSalary = grossSalary - totalDeductions;
-                  const netPayable = (w.previousDue || 0) + netSalary - (w.paymentsMade || 0);
-                  
-                  return (
-                    <tr key={w.id} className="hover:bg-surface-container-low transition-colors group">
-                      <td className="p-3 border-r border-outline-variant/50 sticky left-0 bg-surface-bright group-hover:bg-surface-container-low z-10 shadow-[2px_0_5px_rgba(0,0,0,0.02)]">
-                        <p className="text-sm font-bold text-on-surface truncate whitespace-nowrap">{w.name}</p>
-                        <p className="text-[10px] text-on-surface-variant uppercase tracking-wider truncate mt-0.5 whitespace-nowrap">{w.displayId} • {w.site}</p>
-                      </td>
-                      
-                      <td className="p-3 border-r border-outline-variant/50 text-right text-on-surface-variant whitespace-nowrap">
-                        ₹{(w.previousDue || 0).toLocaleString()}
-                      </td>
-                      
-                      <td className="p-2 border-r border-outline-variant/50 text-center align-middle bg-primary/5">
-                         <input 
-                            type="number" 
-                            name="val1"
-                            value={w.presentDays === 0 && !w._touched ? '' : w.presentDays}
-                            onFocus={() => handleUpdate(w.id, '_touched', 1)}
-                            onChange={(e) => handleUpdate(w.id, 'presentDays', parseFloat(e.target.value) || 0)}
-                            className="w-14 text-center border p-1 text-sm font-bold bg-surface-bright border-primary/30 rounded focus:border-primary focus:ring-1 focus:ring-primary shadow-inner outline-none transition-all text-primary"
-                            step="0.5" min="0" max="31"
-                          />
-                      </td>
-                      
-                      <td className="p-3 border-r border-outline-variant/50 text-right text-on-surface-variant whitespace-nowrap">
-                        ₹{w.dailyRate}
-                      </td>
-
-                      <td className="p-3 border-r border-outline-variant/50 text-right font-bold text-on-surface bg-surface-container-low/50 whitespace-nowrap">
-                        ₹{grossSalary.toLocaleString()}
-                      </td>
-                      
-                      <td className="p-2 border-r border-outline-variant/50 text-center align-middle bg-error/5">
-                          <div className="flex gap-1 justify-center">
-                            <div className="flex flex-col items-center">
-                               <input 
-                                  title="Ration"
-                                  type="number" value={w.ration || ''} onChange={(e) => handleUpdate(w.id, 'ration', parseFloat(e.target.value) || 0)}
-                                  className="w-[50px] text-center border border-error/30 p-1 text-xs font-bold bg-surface-bright rounded text-error focus:border-error focus:ring-1 focus:ring-error shadow-inner outline-none transition-all"
-                                  placeholder="0"
-                                />
-                                <span className="text-[8px] text-error font-medium uppercase mt-0.5">Ration</span>
-                            </div>
-                            
-                            <div className="flex flex-col items-center">
-                                <input 
-                                  title="Pocket Money"
-                                  type="number" value={w.pocketMoney || ''} onChange={(e) => handleUpdate(w.id, 'pocketMoney', parseFloat(e.target.value) || 0)}
-                                  className="w-[50px] text-center border border-error/30 p-1 text-xs font-bold bg-surface-bright rounded text-error focus:border-error focus:ring-1 focus:ring-error shadow-inner outline-none transition-all"
-                                  placeholder="0"
-                                />
-                                <span className="text-[8px] text-error font-medium uppercase mt-0.5">Pocket</span>
-                            </div>
-
-                             <div className="flex flex-col items-center">
-                                <input 
-                                  title="Other Deductions"
-                                  type="number" value={w.otherDeductions || ''} onChange={(e) => handleUpdate(w.id, 'otherDeductions', parseFloat(e.target.value) || 0)}
-                                  className="w-[50px] text-center border border-error/30 p-1 text-xs font-bold bg-surface-bright rounded text-error focus:border-error focus:ring-1 focus:ring-error shadow-inner outline-none transition-all"
-                                  placeholder="0"
-                                />
-                                <span className="text-[8px] text-error font-medium uppercase mt-0.5">Other</span>
-                             </div>
-                          </div>
-                      </td>
-
-                      <td className="p-3 border-r border-outline-variant/50 text-right font-bold text-on-surface whitespace-nowrap">
-                        ₹{netSalary.toLocaleString()}
-                      </td>
-
-                      <td className="p-2 border-r border-outline-variant/50 text-center align-middle bg-success/5">
+      {!dbError && (
+        <div className="bg-surface-bright border border-outline-variant rounded-lg shadow-sm overflow-hidden flex flex-col w-full relative">
+          <div className="overflow-x-auto no-scrollbar relative w-full touch-pan-x">
+            {loading ? (
+               <div className="p-8 text-center text-sm font-medium text-on-surface-variant">Loading data...</div>
+            ) : (
+               <table className="text-left border-collapse w-full min-w-[1100px]">
+                 <thead className="bg-surface-container-low border-b-2 border-outline-variant text-[10px] uppercase">
+                  <tr>
+                    <th className="p-3 font-semibold text-on-surface-variant border-r border-outline-variant/50 sticky left-0 bg-surface-container-low z-20 shadow-[2px_0_5px_rgba(0,0,0,0.02)] min-w-[160px]">Labour Details</th>
+                    <th className="p-3 font-semibold text-primary border-r border-outline-variant/50 text-center w-28 bg-primary/5">Att. Days</th>
+                    <th className="p-3 font-semibold text-on-surface-variant border-r border-outline-variant/50 text-right w-24">Daily Rate</th>
+                    <th className="p-3 font-semibold text-on-surface-variant border-r border-outline-variant/50 text-right w-24 bg-surface-container-low/50">Gross Salary</th>
+                    <th className="p-3 font-semibold text-error border-r border-outline-variant/50 text-center w-56 bg-error/5">
+                      Deductions<br/><span className="lowercase text-[9px] font-medium tracking-normal">(Ration, Pocket, Other)</span>
+                    </th>
+                    <th className="p-3 font-semibold border-r border-outline-variant/50 text-right w-24">Net Salary</th>
+                    <th className="p-3 font-semibold text-success border-r border-outline-variant/50 text-center w-32 bg-success/5">Payments</th>
+                    <th className="p-3 font-bold text-inverse-surface bg-inverse-surface/5 text-right w-28">Closing Due</th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-outline-variant font-medium text-sm">
+                  {filteredWorkers.map((w) => {
+                    const grossSalary = w.dailyRate * (w.attendance_days || 0);
+                    const totalDeductions = (w.ration || 0) + (w.pocket_money || 0) + (w.other_deduction || 0);
+                    const netSalary = grossSalary - totalDeductions;
+                    const closingDue = netSalary - (w.payments_made || 0);
+                    
+                    return (
+                      <tr key={w.id} className="hover:bg-surface-container-low transition-colors group">
+                        <td className="p-3 border-r border-outline-variant/50 sticky left-0 bg-surface-bright group-hover:bg-surface-container-low z-10 shadow-[2px_0_5px_rgba(0,0,0,0.02)]">
+                          <p className="text-sm font-bold text-on-surface truncate whitespace-nowrap">{w.name}</p>
+                          <p className="text-[10px] text-on-surface-variant uppercase tracking-wider truncate mt-0.5 whitespace-nowrap">{w.displayId} • {w.site}</p>
+                        </td>
+                        
+                        <td className="p-2 border-r border-outline-variant/50 text-center align-middle bg-primary/5">
+                           <input 
+                              type="number" 
+                              value={w.attendance_days === 0 && !w._touched ? '' : w.attendance_days}
+                              onFocus={() => handleUpdate(w.id, '_touched', 1)}
+                              onChange={(e) => handleUpdate(w.id, 'attendance_days', parseFloat(e.target.value) || 0)}
+                              className="w-14 text-center border p-1 text-sm font-bold bg-surface-bright border-primary/30 rounded focus:border-primary focus:ring-1 focus:ring-primary shadow-inner outline-none transition-all text-primary"
+                              step="0.5" min="0" max="31"
+                            />
+                        </td>
+                        
+                        <td className="p-3 border-r border-outline-variant/50 text-right align-middle">
                           <input 
-                            title="Payments Made (Advances + Final)"
-                            type="number" value={w.paymentsMade || ''} onChange={(e) => handleUpdate(w.id, 'paymentsMade', parseFloat(e.target.value) || 0)}
-                            className="w-[60px] text-center border border-success/30 p-1 text-sm font-bold bg-surface-bright rounded text-success focus:border-success focus:ring-1 focus:ring-success shadow-inner outline-none mx-auto block transition-all"
-                            placeholder="0"
-                          />
-                      </td>
+                              type="number" 
+                              value={w.dailyRate}
+                              onChange={(e) => handleUpdate(w.id, 'dailyRate', parseFloat(e.target.value) || 0)}
+                              className="w-16 text-right border p-1 border-outline-variant/30 text-xs font-bold bg-surface-bright rounded focus:border-on-surface focus:ring-1 focus:ring-on-surface shadow-inner outline-none transition-all"
+                            />
+                        </td>
 
-                      <td className="p-3 border-l-2 border-outline-variant/50 text-right bg-inverse-surface/5 whitespace-nowrap">
-                        <div className={`text-base font-extrabold ${netPayable > 0 ? 'text-primary' : 'text-success'}`}>
-                          ₹{netPayable.toLocaleString()}
-                        </div>
-                      </td>
-                    </tr>
-                  );
-                })}
-              </tbody>
-            </table>
-          )}
+                        <td className="p-3 border-r border-outline-variant/50 text-right font-bold text-on-surface bg-surface-container-low/50 whitespace-nowrap">
+                          ₹{grossSalary.toLocaleString()}
+                        </td>
+                        
+                        <td className="p-2 border-r border-outline-variant/50 text-center align-middle bg-error/5">
+                            <div className="flex gap-1 justify-center">
+                              <div className="flex flex-col items-center">
+                                 <input 
+                                    title="Ration"
+                                    type="number" value={w.ration || ''} onChange={(e) => handleUpdate(w.id, 'ration', parseFloat(e.target.value) || 0)}
+                                    className="w-[50px] text-center border border-error/30 p-1 text-xs font-bold bg-surface-bright rounded text-error focus:border-error focus:ring-1 focus:ring-error shadow-inner outline-none transition-all"
+                                    placeholder="0"
+                                  />
+                                  <span className="text-[8px] text-error font-medium uppercase mt-0.5">Ration</span>
+                              </div>
+                              
+                              <div className="flex flex-col items-center">
+                                  <input 
+                                    title="Pocket Money"
+                                    type="number" value={w.pocket_money || ''} onChange={(e) => handleUpdate(w.id, 'pocket_money', parseFloat(e.target.value) || 0)}
+                                    className="w-[50px] text-center border border-error/30 p-1 text-xs font-bold bg-surface-bright rounded text-error focus:border-error focus:ring-1 focus:ring-error shadow-inner outline-none transition-all"
+                                    placeholder="0"
+                                  />
+                                  <span className="text-[8px] text-error font-medium uppercase mt-0.5">Pocket</span>
+                              </div>
+
+                               <div className="flex flex-col items-center">
+                                  <input 
+                                    title="Other Deductions"
+                                    type="number" value={w.other_deduction || ''} onChange={(e) => handleUpdate(w.id, 'other_deduction', parseFloat(e.target.value) || 0)}
+                                    className="w-[50px] text-center border border-error/30 p-1 text-xs font-bold bg-surface-bright rounded text-error focus:border-error focus:ring-1 focus:ring-error shadow-inner outline-none transition-all"
+                                    placeholder="0"
+                                  />
+                                  <span className="text-[8px] text-error font-medium uppercase mt-0.5">Other</span>
+                               </div>
+                            </div>
+                        </td>
+
+                        <td className="p-3 border-r border-outline-variant/50 text-right font-bold text-on-surface whitespace-nowrap">
+                          ₹{netSalary.toLocaleString()}
+                        </td>
+
+                        <td className="p-2 border-r border-outline-variant/50 text-center align-middle bg-success/5">
+                            <input 
+                              title="Payments Made (Advances + Final)"
+                              type="number" value={w.payments_made || ''} onChange={(e) => handleUpdate(w.id, 'payments_made', parseFloat(e.target.value) || 0)}
+                              className="w-[60px] text-center border border-success/30 p-1 text-sm font-bold bg-surface-bright rounded text-success focus:border-success focus:ring-1 focus:ring-success shadow-inner outline-none mx-auto block transition-all"
+                              placeholder="0"
+                            />
+                        </td>
+
+                        <td className="p-3 border-l-2 border-outline-variant/50 text-right bg-inverse-surface/5 whitespace-nowrap">
+                          <div className={`text-base font-extrabold ${closingDue > 0 ? 'text-primary' : closingDue < 0 ? 'text-error' : 'text-success'}`}>
+                            ₹{closingDue.toLocaleString()}
+                          </div>
+                        </td>
+                      </tr>
+                    );
+                  })}
+                </tbody>
+              </table>
+            )}
+          </div>
         </div>
-      </div>
+      )}
     </div>
   );
 }
