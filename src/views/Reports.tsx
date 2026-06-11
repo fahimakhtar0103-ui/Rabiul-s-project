@@ -1,5 +1,6 @@
 import { useState, useEffect } from 'react';
 import { BarChart3, TrendingDown, Users, Coins, Building2, Calendar, FileSpreadsheet, Download } from 'lucide-react';
+import { supabase } from '../lib/supabase';
 
 export function Reports() {
   const today = new Date();
@@ -14,9 +15,41 @@ export function Reports() {
   const fetchReports = async () => {
     setLoading(true);
     try {
-      const res = await fetch(`/api/reports?month=${selectedMonth}`);
-      const json = await res.json();
-      if (json.success) setData(json.data);
+      const year = parseInt(selectedMonth.split('-')[0]);
+      const month = selectedMonth.split('-')[1];
+
+      // Get basic stats
+      const laboursRes = await supabase.from('labour').select('id', { count: 'exact' }).eq('is_archived', false);
+      const totalLabours = laboursRes.count || 0;
+
+      const activeLaboursRes = await supabase.from('attendance').select('labourId', { count: 'exact', head: true }).eq('year', year).eq('month', month).gt('days', 0);
+      const activeLabours = activeLaboursRes.count || 0;
+
+      const paymentsRes = await supabase.from('payment').select('amount').like('point_date', `${selectedMonth}%`);
+      const totalPayments = (paymentsRes.data || []).reduce((sum, p) => sum + Number(p.amount), 0);
+
+      const deductionsRes = await supabase.from('deduction').select('amount').like('point_date', `${selectedMonth}%`);
+      const totalDeductions = (deductionsRes.data || []).reduce((sum, d) => sum + Number(d.amount), 0);
+
+      const sitesRes = await supabase.from('site').select('*');
+      const activeLaboursDataRes = await supabase.from('labour').select('id, siteId').eq('is_archived', false);
+      
+      const siteSummaries = (sitesRes.data || []).map(site => {
+        const count = (activeLaboursDataRes.data || []).filter(l => l.siteId === site.id).length;
+        return {
+          id: site.id,
+          name: site.name,
+          labourCount: count
+        };
+      });
+
+      setData({
+        totalLabours,
+        activeLabours,
+        totalPayments,
+        totalDeductions,
+        siteSummaries
+      });
     } catch (err) {
       console.error(err);
     } finally {
@@ -26,43 +59,96 @@ export function Reports() {
 
   const exportCSV = async () => {
     try {
-      const res = await fetch(`/api/settlement?month=${selectedMonth}`);
-      const json = await res.json();
-      if (json.success) {
-        const workers = json.data;
-        const headers = ['ID', 'Name', 'Site', 'Daily Rate', 'Prev Due', 'Att. Days', 'Gross Salary', 'Ration', 'Pocket Money', 'Other Deductions', 'Net Salary', 'Payments Made', 'Closing Due'];
+      const year = parseInt(selectedMonth.split('-')[0]);
+      const month = selectedMonth.split('-')[1];
+      const currentMonthDateStr = `${year}-${month}-01`;
+
+      const laboursRes = await supabase.from('labour').select('*, site(*)').eq('is_archived', false).order('id', { ascending: false });
+      const attendanceRes = await supabase.from('attendance').select('*');
+      const paymentRes = await supabase.from('payment').select('*');
+      const deductionRes = await supabase.from('deduction').select('*');
+
+      const labours = laboursRes.data || [];
+      const workers = labours.map((labour: any) => {
+        // Current month
+        const currentAttendance = (attendanceRes.data || []).find(a => a.labourId === labour.id && a.year === year && a.month.toString().padStart(2, '0') === month);
+        const currentDays = currentAttendance ? Number(currentAttendance.days) : 0;
         
-        const rows = workers.map((w: any) => {
-          const grossSalary = w.dailyRate * (w.presentDays || 0);
-          const totalDeductions = (w.ration || 0) + (w.pocketMoney || 0) + (w.otherDeductions || 0);
-          const netSalary = grossSalary - totalDeductions;
-          const netPayable = (w.previousDue || 0) + netSalary - (w.paymentsMade || 0);
-          
-          return [
-            w.displayId,
-            w.name,
-            w.site,
-            w.dailyRate,
-            w.previousDue,
-            w.presentDays || 0,
-            grossSalary,
-            w.ration || 0,
-            w.pocketMoney || 0,
-            w.otherDeductions || 0,
-            netSalary,
-            w.paymentsMade || 0,
-            netPayable
-          ].join(',');
+        const currentPayments = (paymentRes.data || []).filter(p => p.labourId === labour.id && p.point_date.toString().startsWith(selectedMonth));
+        const currentDeductions = (deductionRes.data || []).filter(d => d.labourId === labour.id && d.point_date.toString().startsWith(selectedMonth));
+
+        const paymentsMade = currentPayments.reduce((sum, p) => sum + Number(p.amount), 0);
+        
+        let ration = 0, pocketMoney = 0, otherDeductions = 0;
+        currentDeductions.forEach(d => {
+          const reason = (d.reason || '').toLowerCase();
+          if (reason.includes('ration')) ration += Number(d.amount);
+          else if (reason.includes('pocket')) pocketMoney += Number(d.amount);
+          else otherDeductions += Number(d.amount);
         });
 
-        const csvContent = "data:text/csv;charset=utf-8," + [headers.join(','), ...rows].join('\n');
-        const encodedUri = encodeURI(csvContent);
-        const link = document.createElement("a");
-        link.setAttribute("href", encodedUri);
-        link.setAttribute("download", `monthly_report_${selectedMonth}.csv`);
-        document.body.appendChild(link);
-        link.click();
-      }
+        // Previous due
+        const prevAttendance = (attendanceRes.data || []).filter(a => {
+          const aDate = `${a.year}-${a.month.toString().padStart(2, '0')}-01`;
+          return aDate < currentMonthDateStr;
+        });
+        const prevPayments = (paymentRes.data || []).filter(p => p.point_date.toString() < currentMonthDateStr && p.labourId === labour.id);
+        const prevDeductions = (deductionRes.data || []).filter(d => d.point_date.toString() < currentMonthDateStr && d.labourId === labour.id);
+
+        const myPrevAttendance = prevAttendance.filter(a => a.labourId === labour.id);
+        const prevGross = myPrevAttendance.reduce((sum, a) => sum + (Number(a.days) * Number(labour.dailyRate)), 0);
+        const prevPaid = prevPayments.reduce((sum, p) => sum + Number(p.amount), 0);
+        const prevDeducted = prevDeductions.reduce((sum, d) => sum + Number(d.amount), 0);
+
+        const previousDue = prevGross - prevPaid - prevDeducted;
+
+        return {
+          id: labour.id,
+          name: labour.name,
+          displayId: labour.idNumber || 'NO ID',
+          site: labour.site ? labour.site.name : 'Unassigned',
+          dailyRate: Number(labour.dailyRate),
+          previousDue,
+          presentDays: currentDays,
+          ration,
+          pocketMoney,
+          otherDeductions,
+          paymentsMade
+        };
+      });
+
+      const headers = ['ID', 'Name', 'Site', 'Daily Rate', 'Prev Due', 'Att. Days', 'Gross Salary', 'Ration', 'Pocket Money', 'Other Deductions', 'Net Salary', 'Payments Made', 'Closing Due'];
+      
+      const rows = workers.map((w: any) => {
+        const grossSalary = w.dailyRate * (w.presentDays || 0);
+        const totalDeductions = (w.ration || 0) + (w.pocketMoney || 0) + (w.otherDeductions || 0);
+        const netSalary = grossSalary - totalDeductions;
+        const netPayable = (w.previousDue || 0) + netSalary - (w.paymentsMade || 0);
+        
+        return [
+          w.displayId,
+          w.name,
+          w.site,
+          w.dailyRate,
+          w.previousDue,
+          w.presentDays || 0,
+          grossSalary,
+          w.ration || 0,
+          w.pocketMoney || 0,
+          w.otherDeductions || 0,
+          netSalary,
+          w.paymentsMade || 0,
+          netPayable
+        ].join(',');
+      });
+
+      const csvContent = "data:text/csv;charset=utf-8," + [headers.join(','), ...rows].join('\n');
+      const encodedUri = encodeURI(csvContent);
+      const link = document.createElement("a");
+      link.setAttribute("href", encodedUri);
+      link.setAttribute("download", `monthly_report_${selectedMonth}.csv`);
+      document.body.appendChild(link);
+      link.click();
     } catch (err) {
       console.error("Export error", err);
     }

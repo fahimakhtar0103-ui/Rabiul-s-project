@@ -1,5 +1,6 @@
 import { useState, useEffect } from 'react';
 import { Search, Save, Download, FileSpreadsheet, Lock } from 'lucide-react';
+import { supabase } from '../lib/supabase';
 
 export function Settlement() {
   const [workers, setWorkers] = useState<any[]>([]);
@@ -16,9 +17,66 @@ export function Settlement() {
   const fetchSettlement = async () => {
     setLoading(true);
     try {
-      const res = await fetch(`/api/settlement?month=${selectedMonth}`);
-      const data = await res.json();
-      if (data.success) setWorkers(data.data);
+      const year = parseInt(selectedMonth.split('-')[0]);
+      const month = selectedMonth.split('-')[1];
+      const currentMonthDateStr = `${year}-${month}-01`;
+
+      const laboursRes = await supabase.from('labour').select('*, site(*)').eq('is_archived', false).order('id', { ascending: false });
+      const attendanceRes = await supabase.from('attendance').select('*');
+      const paymentRes = await supabase.from('payment').select('*');
+      const deductionRes = await supabase.from('deduction').select('*');
+
+      const labours = laboursRes.data || [];
+      const settlementData = labours.map((labour: any) => {
+        // Current month
+        const currentAttendance = (attendanceRes.data || []).find(a => a.labourId === labour.id && a.year === year && a.month.toString().padStart(2, '0') === month);
+        const currentDays = currentAttendance ? Number(currentAttendance.days) : 0;
+        
+        const currentPayments = (paymentRes.data || []).filter(p => p.labourId === labour.id && p.point_date.toString().startsWith(selectedMonth));
+        const currentDeductions = (deductionRes.data || []).filter(d => d.labourId === labour.id && d.point_date.toString().startsWith(selectedMonth));
+
+        const paymentsMade = currentPayments.reduce((sum, p) => sum + Number(p.amount), 0);
+        
+        let ration = 0, pocketMoney = 0, otherDeductions = 0;
+        currentDeductions.forEach(d => {
+          const reason = (d.reason || '').toLowerCase();
+          if (reason.includes('ration')) ration += Number(d.amount);
+          else if (reason.includes('pocket')) pocketMoney += Number(d.amount);
+          else otherDeductions += Number(d.amount);
+        });
+
+        // Previous due
+        const prevAttendance = (attendanceRes.data || []).filter(a => {
+          const aDate = `${a.year}-${a.month.toString().padStart(2, '0')}-01`;
+          return aDate < currentMonthDateStr;
+        });
+        const prevPayments = (paymentRes.data || []).filter(p => p.point_date.toString() < currentMonthDateStr && p.labourId === labour.id);
+        const prevDeductions = (deductionRes.data || []).filter(d => d.point_date.toString() < currentMonthDateStr && d.labourId === labour.id);
+
+        // prevGross should only be for this labour!
+        const myPrevAttendance = prevAttendance.filter(a => a.labourId === labour.id);
+        const prevGross = myPrevAttendance.reduce((sum, a) => sum + (Number(a.days) * Number(labour.dailyRate)), 0);
+        const prevPaid = prevPayments.reduce((sum, p) => sum + Number(p.amount), 0);
+        const prevDeducted = prevDeductions.reduce((sum, d) => sum + Number(d.amount), 0);
+
+        const previousDue = prevGross - prevPaid - prevDeducted;
+
+        return {
+          id: labour.id,
+          name: labour.name,
+          displayId: labour.idNumber || 'NO ID',
+          site: labour.site ? labour.site.name : 'Unassigned',
+          dailyRate: Number(labour.dailyRate),
+          previousDue,
+          presentDays: currentDays,
+          ration,
+          pocketMoney,
+          otherDeductions,
+          paymentsMade
+        };
+      });
+
+      setWorkers(settlementData);
     } catch (err) {
       console.error(err);
     } finally {
@@ -32,21 +90,38 @@ export function Settlement() {
 
   const handleSave = async () => {
     try {
-      const res = await fetch('/api/settlement/save', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ month: selectedMonth, workers })
-      });
-      const data = await res.json();
-      if (data.success) {
-        alert("Settlement data saved successfully for " + selectedMonth);
-        fetchSettlement();
-      } else {
-        alert("Error saving: " + data.error);
+      const year = parseInt(selectedMonth.split('-')[0]);
+      const month = selectedMonth.split('-')[1];
+      const point_date = `${year}-${month}-28`;
+
+      for (const w of workers) {
+        if (w.presentDays > 0 || String(w.presentDays) === "0") {
+          // Upsert attendance
+          const existingAtt = await supabase.from('attendance').select('id').eq('labourId', w.id).eq('year', year).eq('month', month).single();
+          if (existingAtt.data) {
+            await supabase.from('attendance').update({ days: w.presentDays }).eq('id', existingAtt.data.id);
+          } else {
+            await supabase.from('attendance').insert([{ labourId: w.id, month, year, days: w.presentDays }]);
+          }
+        }
+
+        // Clean existing ones generated by settlement bulk for this month
+        await supabase.from('deduction').delete().eq('labourId', w.id).like('point_date', `${selectedMonth}%`);
+        if (w.ration > 0) await supabase.from('deduction').insert([{ labourId: w.id, point_date, amount: w.ration, reason: 'Ration' }]);
+        if (w.pocketMoney > 0) await supabase.from('deduction').insert([{ labourId: w.id, point_date, amount: w.pocketMoney, reason: 'Pocket Money' }]);
+        if (w.otherDeductions > 0) await supabase.from('deduction').insert([{ labourId: w.id, point_date, amount: w.otherDeductions, reason: 'Other' }]);
+
+        await supabase.from('payment').delete().eq('labourId', w.id).like('point_date', `${selectedMonth}%`).eq('notes', 'Bulk Settlement');
+        if (w.paymentsMade > 0) {
+          await supabase.from('payment').insert([{ labourId: w.id, point_date, amount: w.paymentsMade, mode: 'Cash', notes: 'Bulk Settlement' }]);
+        }
       }
+
+      alert("Settlement data saved successfully for " + selectedMonth);
+      fetchSettlement();
     } catch (err) {
       console.error(err);
-      alert("Network error.");
+      alert("Network or database error.");
     }
   };
 

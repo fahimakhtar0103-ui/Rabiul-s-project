@@ -1,6 +1,7 @@
 import { useState, useEffect } from 'react';
 import { Download, IndianRupee, FileText, Calendar, Plus, Save, Phone, Home, FileSpreadsheet } from 'lucide-react';
 import { LabourProfileData } from '../types';
+import { supabase } from '../lib/supabase';
 
 interface ProfileProps {
   worker: any; // We receive basic worker from navigate
@@ -26,10 +27,22 @@ export function Profile({ worker, onNavigate }: Readonly<ProfileProps>) {
 
   const fetchProfile = async () => {
     try {
-      const res = await fetch(`/api/labour/${worker.id}/profile`);
-      const resData = await res.json();
-      if (resData.success) {
-        setData(resData.data);
+      const labourRes = await supabase.from('labour').select('*, site(*)').eq('id', worker.id).single();
+      const attendanceRes = await supabase.from('attendance').select('*').eq('labourId', worker.id).order('year', { ascending: false }).order('month', { ascending: false });
+      const paymentRes = await supabase.from('payment').select('*').eq('labourId', worker.id).order('point_date', { ascending: false });
+      const deductionRes = await supabase.from('deduction').select('*').eq('labourId', worker.id).order('point_date', { ascending: false });
+
+      if (labourRes.data) {
+        const labourWithSite = {
+          ...labourRes.data,
+          siteName: labourRes.data.site ? labourRes.data.site.name : null
+        };
+        setData({
+          labour: labourWithSite,
+          attendance: attendanceRes.data || [],
+          payments: paymentRes.data || [],
+          deductions: deductionRes.data || []
+        });
       }
     } catch (err) {
       console.error(err);
@@ -47,7 +60,7 @@ export function Profile({ worker, onNavigate }: Readonly<ProfileProps>) {
   const currentMonthDateStr = `${selectedYearStr}-${selectedMonthStr}-01`;
 
   // Filter for THIS month
-  const currentAttendance = attendance.find(a => a.year.toString() === selectedYearStr && a.month === selectedMonthStr);
+  const currentAttendance = attendance.find(a => a.year.toString() === selectedYearStr && a.month.toString().padStart(2, '0') === selectedMonthStr);
   const currentDays = currentAttendance ? Number(currentAttendance.days) : 0;
   
   const currentPayments = payments.filter(p => p.point_date.startsWith(selectedMonth));
@@ -60,7 +73,7 @@ export function Profile({ worker, onNavigate }: Readonly<ProfileProps>) {
   // Calculate PREVIOUS due (up to the end of last month)
   // Everything before selectedMonth
   const previousAttendance = attendance.filter(a => {
-    const aDate = `${a.year}-${a.month.padStart(2, '0')}-01`;
+    const aDate = `${a.year}-${a.month.toString().padStart(2, '0')}-01`;
     return aDate < currentMonthDateStr;
   });
   const previousPayments = payments.filter(p => p.point_date < currentMonthDateStr);
@@ -75,7 +88,7 @@ export function Profile({ worker, onNavigate }: Readonly<ProfileProps>) {
 
   // Compile history ledger
   const historyItems = [
-    ...attendance.map(a => ({ date: `${a.year}-${a.month.padStart(2, '0')}-28`, type: 'Salary (Attendance)', amount: Number(a.days) * Number(labour.dailyRate), debit: 0, credit: Number(a.days) * Number(labour.dailyRate) })),
+    ...attendance.map(a => ({ date: `${a.year}-${a.month.toString().padStart(2, '0')}-28`, type: 'Salary (Attendance)', amount: Number(a.days) * Number(labour.dailyRate), debit: 0, credit: Number(a.days) * Number(labour.dailyRate) })),
     ...payments.map(p => ({ date: p.point_date, type: `Payment (${p.mode})`, amount: Number(p.amount), debit: Number(p.amount), credit: 0 })),
     ...deductions.map(d => ({ date: d.point_date, type: `Deduction (${d.reason})`, amount: Number(d.amount), debit: Number(d.amount), credit: 0 }))
   ].sort((a, b) => new Date(a.date).getTime() - new Date(b.date).getTime());
@@ -90,45 +103,62 @@ export function Profile({ worker, onNavigate }: Readonly<ProfileProps>) {
   const submitAttendance = async (e: React.FormEvent) => {
     e.preventDefault();
     try {
-      const res = await fetch(`/api/labour/${labour.id}/attendance`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ month: selectedMonthStr, year: parseInt(selectedYearStr), days: parseFloat(attendanceForm.days) })
-      });
-      if (res.ok) {
+      // Upsert: First check if it exists
+      const existing = await supabase.from('attendance').select('id').eq('labourId', labour.id).eq('year', parseInt(selectedYearStr)).eq('month', selectedMonthStr).single();
+      
+      let error;
+      if (existing.data) {
+        const res = await supabase.from('attendance').update({ days: parseFloat(attendanceForm.days) }).eq('id', existing.data.id);
+        error = res.error;
+      } else {
+        const res = await supabase.from('attendance').insert([{ 
+          labourId: labour.id, 
+          year: parseInt(selectedYearStr), 
+          month: selectedMonthStr, 
+          days: parseFloat(attendanceForm.days) 
+        }]);
+        error = res.error;
+      }
+
+      if (!error) {
         setAttendanceForm({ days: '' });
         fetchProfile();
-      }
+      } else { alert(error.message); }
     } catch (err) { console.error(err); }
   };
 
   const submitPayment = async (e: React.FormEvent) => {
     e.preventDefault();
     try {
-      const res = await fetch(`/api/labour/${labour.id}/payment`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ ...paymentForm, amount: parseFloat(paymentForm.amount) })
-      });
-      if (res.ok) {
+      const { error } = await supabase.from('payment').insert([{
+        labourId: labour.id,
+        point_date: paymentForm.date,
+        amount: parseFloat(paymentForm.amount),
+        mode: paymentForm.mode,
+        notes: paymentForm.notes
+      }]);
+      
+      if (!error) {
         setPaymentForm({ date: today.toISOString().slice(0, 10), amount: '', mode: 'Cash', notes: '' });
         fetchProfile();
-      }
+      } else { alert(error.message); }
     } catch (err) { console.error(err); }
   };
 
   const submitDeduction = async (e: React.FormEvent) => {
     e.preventDefault();
     try {
-      const res = await fetch(`/api/labour/${labour.id}/deduction`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ ...deductionForm, amount: parseFloat(deductionForm.amount) })
-      });
-      if (res.ok) {
+      const { error } = await supabase.from('deduction').insert([{
+        labourId: labour.id,
+        point_date: deductionForm.date,
+        amount: parseFloat(deductionForm.amount),
+        reason: deductionForm.reason
+      }]);
+      
+      if (!error) {
         setDeductionForm({ date: today.toISOString().slice(0, 10), amount: '', reason: '' });
         fetchProfile();
-      }
+      } else { alert(error.message); }
     } catch (err) { console.error(err); }
   };
 

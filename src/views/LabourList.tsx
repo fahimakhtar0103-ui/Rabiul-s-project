@@ -1,6 +1,7 @@
 import { useState, useEffect } from 'react';
 import { Search, Filter, History, IndianRupee, UserPlus, X, Edit, Trash2, Archive } from 'lucide-react';
 import { ViewState, Labour, Site } from '../types';
+import { supabase } from '../lib/supabase';
 
 interface LabourListProps {
   onNavigate: (view: ViewState, ctx?: any) => void;
@@ -25,9 +26,19 @@ export function LabourList({ onNavigate }: Readonly<LabourListProps>) {
 
   const fetchLabours = async () => {
     try {
-      const res = await fetch('/api/labour');
-      const data = await res.json();
-      if (data.success) setLabours(data.data);
+      const { data, error } = await supabase
+        .from('labour')
+        .select('*, site(*)')
+        .eq('is_archived', false)
+        .order('id', { ascending: false });
+        
+      if (error) throw error;
+      
+      const formatted = (data || []).map((l: any) => ({
+        ...l,
+        siteName: l.site ? l.site.name : null
+      }));
+      setLabours(formatted);
     } catch (err) {
       console.error(err);
     }
@@ -35,9 +46,9 @@ export function LabourList({ onNavigate }: Readonly<LabourListProps>) {
 
   const fetchSites = async () => {
     try {
-      const res = await fetch('/api/site');
-      const data = await res.json();
-      if (data.success) setSites(data.data);
+      const { data, error } = await supabase.from('site').select('*');
+      if (error) throw error;
+      setSites(data || []);
     } catch (err) {
       console.error(err);
     }
@@ -63,25 +74,41 @@ export function LabourList({ onNavigate }: Readonly<LabourListProps>) {
   };
 
   const saveLabour = async () => {
+    console.log("saveLabour initiated", { isEdit: !!editingLabour, formData });
     try {
       const isEdit = !!editingLabour;
-      const url = isEdit ? `/api/labour/${editingLabour.id}` : '/api/labour';
-      const method = isEdit ? 'PUT' : 'POST';
+      
+      const payload = {
+        name: formData.name,
+        fatherName: formData.fatherName,
+        mobile: formData.mobile,
+        idNumber: formData.idNumber,
+        siteId: formData.siteId ? parseInt(formData.siteId) : null,
+        dailyRate: formData.dailyRate,
+        status: formData.status,
+        role: 'Labour',
+        is_archived: false
+      };
+      
+      let error;
+      if (isEdit && editingLabour) {
+        const result = await supabase.from('labour').update(payload).eq('id', editingLabour.id);
+        error = result.error;
+      } else {
+        const result = await supabase.from('labour').insert([payload]);
+        error = result.error;
+      }
 
-      const res = await fetch(url, {
-        method,
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ ...formData, role: 'Labour', siteId: formData.siteId ? parseInt(formData.siteId) : null })
-      });
-      const data = await res.json();
-      if (data.success) {
+      if (!error) {
+        console.log("Save successful, closing modal and refreshing");
         setShowModal(false);
         fetchLabours();
       } else {
-        alert(data.error);
+        console.error("Save failed with error from API:", error.message);
+        alert(error.message);
       }
     } catch (err) {
-      console.error(err);
+      console.error("Network or parsing error in saveLabour:", err);
     }
   };
 
@@ -89,13 +116,10 @@ export function LabourList({ onNavigate }: Readonly<LabourListProps>) {
     e.stopPropagation();
     if (!confirm(`Are you sure you want to archive ${labour.name}?`)) return;
     try {
-      const res = await fetch(`/api/labour/${labour.id}`, {
-        method: 'PUT',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ ...labour, is_archived: true })
-      });
-      const data = await res.json();
-      if (data.success) fetchLabours();
+      const { error } = await supabase.from('labour').update({ is_archived: true }).eq('id', labour.id);
+      if (!error) {
+        fetchLabours();
+      }
     } catch (err) {
       console.error(err);
     }
@@ -105,13 +129,20 @@ export function LabourList({ onNavigate }: Readonly<LabourListProps>) {
     e.stopPropagation();
     if (!confirm('Warning: Deleting will remove all payments and attendance. Are you sure?')) return;
     try {
-      const res = await fetch(`/api/labour/${id}`, { method: 'DELETE' });
-      const data = await res.json();
-      if (data.success) fetchLabours();
+      // Manual cascade delete emulation, since maybe foreign keys aren't cascaded
+      await supabase.from('payment').delete().eq('labourId', id);
+      await supabase.from('attendance').delete().eq('labourId', id);
+      await supabase.from('deduction').delete().eq('labourId', id);
+      const { error } = await supabase.from('labour').delete().eq('id', id);
+      
+      if (!error) {
+        fetchLabours();
+      } else { alert(error.message); }
     } catch (err) {
       console.error(err);
     }
   };
+
 
   const filteredLabours = labours.filter(w => 
     w.name.toLowerCase().includes(searchTerm.toLowerCase()) || 
