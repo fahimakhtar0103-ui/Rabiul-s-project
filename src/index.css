@@ -54,13 +54,19 @@ body {
   -webkit-tap-highlight-color: transparent;
 }
 
-/* Hide scrollbar for Chrome, Safari and Opera */
-.no-scrollbar::-webkit-scrollbar {
-  display: none;
+/* Thin scrollbar for scrollable areas */
+.custom-scrollbar::-webkit-scrollbar {
+  height: 6px;
+  width: 6px;
 }
-
-/* Hide scrollbar for IE, Edge and Firefox */
-.no-scrollbar {
-  -ms-overflow-style: none;  /* IE and Edge */
-  scrollbar-width: none;  /* Firefox */
+.custom-scrollbar::-webkit-scrollbar-track {
+  background: var(--color-surface-container);
+  border-radius: 4px;
+}
+.custom-scrollbar::-webkit-scrollbar-thumb {
+  background: var(--color-outline-variant);
+  border-radius: 4px;
+}
+.custom-scrollbar::-webkit-scrollbar-thumb:hover {
+  background: var(--color-outline);
 }

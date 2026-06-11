@@ -1,7 +1,10 @@
-import { useState, useEffect } from 'react';
-import { Download, IndianRupee, FileText, Calendar, Plus, Save, Phone, Home, FileSpreadsheet } from 'lucide-react';
+import React, { useState, useEffect } from 'react';
+import { Download, IndianRupee, FileText, Calendar, Plus, Save, Phone, Home, FileSpreadsheet, Edit } from 'lucide-react';
 import { LabourProfileData } from '../types';
 import { supabase } from '../lib/supabase';
+import jsPDF from 'jspdf';
+import autoTable from 'jspdf-autotable';
+import * as XLSX from 'xlsx';
 
 interface ProfileProps {
   worker: any; // We receive basic worker from navigate
@@ -17,9 +20,9 @@ export function Profile({ worker, onNavigate }: Readonly<ProfileProps>) {
   const [selectedMonth, setSelectedMonth] = useState(today.toISOString().slice(0, 7)); // YYYY-MM
   
   // Forms state
-  const [attendanceForm, setAttendanceForm] = useState({ days: '' });
-  const [paymentForm, setPaymentForm] = useState({ date: today.toISOString().slice(0, 10), amount: '', mode: 'Cash', notes: '' });
-  const [deductionForm, setDeductionForm] = useState({ date: today.toISOString().slice(0, 10), amount: '', reason: '' });
+  const [attendanceForm, setAttendanceForm] = useState({ id: null as string | null, days: '' });
+  const [paymentForm, setPaymentForm] = useState({ id: null as string | null, date: today.toISOString().slice(0, 10), amount: '', mode: 'Cash', notes: '' });
+  const [deductionForm, setDeductionForm] = useState({ id: null as string | null, date: today.toISOString().slice(0, 10), amount: '', reason: '' });
 
   useEffect(() => {
     if (worker?.id) fetchProfile();
@@ -31,6 +34,13 @@ export function Profile({ worker, onNavigate }: Readonly<ProfileProps>) {
       const attendanceRes = await supabase.from('attendance').select('*').eq('labourId', worker.id).order('year', { ascending: false }).order('month', { ascending: false });
       const paymentRes = await supabase.from('payment').select('*').eq('labourId', worker.id).order('point_date', { ascending: false });
       const deductionRes = await supabase.from('deduction').select('*').eq('labourId', worker.id).order('point_date', { ascending: false });
+      
+      let monthlyEntriesRes: any = { data: [] };
+      try {
+        monthlyEntriesRes = await supabase.from('monthly_entries').select('*').eq('labourId', worker.id);
+      } catch (err) {
+        // Table might not exist yet if Settlement tab wasn't visited
+      }
 
       if (labourRes.data) {
         const labourWithSite = {
@@ -41,7 +51,8 @@ export function Profile({ worker, onNavigate }: Readonly<ProfileProps>) {
           labour: labourWithSite,
           attendance: attendanceRes.data || [],
           payments: paymentRes.data || [],
-          deductions: deductionRes.data || []
+          deductions: deductionRes.data || [],
+          monthlyEntries: monthlyEntriesRes.data || []
         });
       }
     } catch (err) {
@@ -52,22 +63,28 @@ export function Profile({ worker, onNavigate }: Readonly<ProfileProps>) {
   if (!worker) return <div className="p-4 text-center mt-10">No worker selected</div>;
   if (!data) return <div className="p-4 text-center mt-10">Loading profile data...</div>;
 
-  const { labour, attendance, payments, deductions } = data;
+  const { labour, attendance, payments, deductions, monthlyEntries = [] } = data;
 
   // Process data based on selectedMonth
   const selectedYearStr = selectedMonth.split('-')[0];
   const selectedMonthStr = selectedMonth.split('-')[1];
   const currentMonthDateStr = `${selectedYearStr}-${selectedMonthStr}-01`;
 
-  // Filter for THIS month
+  // Fetch individual table data for THIS month
   const currentAttendance = attendance.find(a => a.year.toString() === selectedYearStr && a.month.toString().padStart(2, '0') === selectedMonthStr);
-  const currentDays = currentAttendance ? Number(currentAttendance.days) : 0;
+  const currentDaysManual = currentAttendance ? Number(currentAttendance.days) : 0;
   
   const currentPayments = payments.filter(p => p.point_date.startsWith(selectedMonth));
   const currentDeductions = deductions.filter(d => d.point_date.startsWith(selectedMonth));
 
-  const totalPaidThisMonth = currentPayments.reduce((sum, p) => sum + Number(p.amount), 0);
-  const totalDeductedThisMonth = currentDeductions.reduce((sum, d) => sum + Number(d.amount), 0);
+  // Fetch compiled Monthly Entry for THIS month (from Settlement section)
+  const currentMonthlyEntry = monthlyEntries.find(m => m.month === selectedMonth);
+
+  // Combine manual inputs with bulk monthly entry stats
+  const currentDays = currentDaysManual + (currentMonthlyEntry?.attendance_days || 0);
+
+  const totalPaidThisMonth = currentPayments.reduce((sum, p) => sum + Number(p.amount), 0) + (currentMonthlyEntry?.payments_made || 0);
+  const totalDeductedThisMonth = currentDeductions.reduce((sum, d) => sum + Number(d.amount), 0) + (currentMonthlyEntry?.total_deductions || 0);
   const grossSalaryThisMonth = currentDays * Number(labour.dailyRate);
 
   // Calculate PREVIOUS due (up to the end of last month)
@@ -78,19 +95,53 @@ export function Profile({ worker, onNavigate }: Readonly<ProfileProps>) {
   });
   const previousPayments = payments.filter(p => p.point_date < currentMonthDateStr);
   const previousDeductions = deductions.filter(d => d.point_date < currentMonthDateStr);
+  const previousMonthlyEntries = monthlyEntries.filter(m => `${m.month}-01` < currentMonthDateStr);
 
-  const prevGross = previousAttendance.reduce((sum, a) => sum + (Number(a.days) * Number(labour.dailyRate)), 0);
-  const prevPaid = previousPayments.reduce((sum, p) => sum + Number(p.amount), 0);
-  const prevDeducted = previousDeductions.reduce((sum, d) => sum + Number(d.amount), 0);
+  const prevGross = previousAttendance.reduce((sum, a) => sum + (Number(a.days) * Number(labour.dailyRate)), 0) 
+    + previousMonthlyEntries.reduce((sum, m) => sum + (Number(m.attendance_days || 0) * Number(m.daily_rate || labour.dailyRate)), 0);
+  const prevPaid = previousPayments.reduce((sum, p) => sum + Number(p.amount), 0)
+    + previousMonthlyEntries.reduce((sum, m) => sum + Number(m.payments_made || 0), 0);
+  const prevDeducted = previousDeductions.reduce((sum, d) => sum + Number(d.amount), 0)
+    + previousMonthlyEntries.reduce((sum, m) => sum + Number(m.total_deductions || 0), 0);
 
   const previousDue = prevGross - prevPaid - prevDeducted;
   const currentDue = previousDue + grossSalaryThisMonth - totalPaidThisMonth - totalDeductedThisMonth;
 
   // Compile history ledger
+  const getEntryDate = (createdAt: any, yearStr: string, monthStr: string) => {
+    if (createdAt && typeof createdAt === 'string' && createdAt.includes('T')) {
+      return createdAt.split('T')[0];
+    }
+    const y = parseInt(yearStr);
+    const m = parseInt(monthStr);
+    const today = new Date();
+    if (today.getFullYear() === y && today.getMonth() + 1 === m) {
+      return today.toISOString().split('T')[0];
+    }
+    const lastDay = new Date(y, m, 0).getDate();
+    return `${y}-${m.toString().padStart(2, '0')}-${lastDay.toString().padStart(2, '0')}`;
+  };
+
+  const getDisplayDate = (dStr: string) => {
+    if (!dStr) return '';
+    const parts = dStr.split('-');
+    if (parts.length === 3) {
+      return `${parts[2]}/${parts[1]}/${parts[0]}`;
+    }
+    return dStr;
+  };
+
   const historyItems = [
-    ...attendance.map(a => ({ date: `${a.year}-${a.month.toString().padStart(2, '0')}-28`, type: 'Salary (Attendance)', amount: Number(a.days) * Number(labour.dailyRate), debit: 0, credit: Number(a.days) * Number(labour.dailyRate) })),
+    ...attendance.map(a => ({ date: getEntryDate(a.created_at, a.year.toString(), a.month.toString()), type: 'Salary (Manual Att.)', amount: Number(a.days) * Number(labour.dailyRate), debit: 0, credit: Number(a.days) * Number(labour.dailyRate) })),
     ...payments.map(p => ({ date: p.point_date, type: `Payment (${p.mode})`, amount: Number(p.amount), debit: Number(p.amount), credit: 0 })),
-    ...deductions.map(d => ({ date: d.point_date, type: `Deduction (${d.reason})`, amount: Number(d.amount), debit: Number(d.amount), credit: 0 }))
+    ...deductions.map(d => ({ date: d.point_date, type: `Deduction (${d.reason})`, amount: Number(d.amount), debit: Number(d.amount), credit: 0 })),
+    // Include bulk monthly entries
+    ...monthlyEntries.map(m => {
+       const [yearStr, monthStr] = m.month.split('-');
+       const mCredit = Number(m.attendance_days || 0) * Number(m.daily_rate || labour.dailyRate);
+       const mDebit = Number(m.payments_made || 0) + Number(m.total_deductions || 0);
+       return { date: getEntryDate(m.created_at, yearStr, monthStr), type: `Settlement Record (${m.month})`, amount: Math.abs(mCredit - mDebit), debit: mDebit, credit: mCredit };
+    }).filter(m => m.debit > 0 || m.credit > 0)
   ].sort((a, b) => new Date(a.date).getTime() - new Date(b.date).getTime());
 
   let runningBalance = 0;
@@ -121,7 +172,7 @@ export function Profile({ worker, onNavigate }: Readonly<ProfileProps>) {
       }
 
       if (!error) {
-        setAttendanceForm({ days: '' });
+        setAttendanceForm({ id: null, days: '' });
         fetchProfile();
       } else { alert(error.message); }
     } catch (err) { console.error(err); }
@@ -130,16 +181,20 @@ export function Profile({ worker, onNavigate }: Readonly<ProfileProps>) {
   const submitPayment = async (e: React.FormEvent) => {
     e.preventDefault();
     try {
-      const { error } = await supabase.from('payment').insert([{
+      const payload = {
         labourId: labour.id,
         point_date: paymentForm.date,
         amount: parseFloat(paymentForm.amount),
         mode: paymentForm.mode,
         notes: paymentForm.notes
-      }]);
+      };
+      
+      const { error } = paymentForm.id 
+        ? await supabase.from('payment').update(payload).eq('id', paymentForm.id)
+        : await supabase.from('payment').insert([payload]);
       
       if (!error) {
-        setPaymentForm({ date: today.toISOString().slice(0, 10), amount: '', mode: 'Cash', notes: '' });
+        setPaymentForm({ id: null, date: today.toISOString().slice(0, 10), amount: '', mode: 'Cash', notes: '' });
         fetchProfile();
       } else { alert(error.message); }
     } catch (err) { console.error(err); }
@@ -148,36 +203,78 @@ export function Profile({ worker, onNavigate }: Readonly<ProfileProps>) {
   const submitDeduction = async (e: React.FormEvent) => {
     e.preventDefault();
     try {
-      const { error } = await supabase.from('deduction').insert([{
+      const payload = {
         labourId: labour.id,
         point_date: deductionForm.date,
         amount: parseFloat(deductionForm.amount),
         reason: deductionForm.reason
-      }]);
+      };
+
+      const { error } = deductionForm.id
+        ? await supabase.from('deduction').update(payload).eq('id', deductionForm.id)
+        : await supabase.from('deduction').insert([payload]);
       
       if (!error) {
-        setDeductionForm({ date: today.toISOString().slice(0, 10), amount: '', reason: '' });
+        setDeductionForm({ id: null, date: today.toISOString().slice(0, 10), amount: '', reason: '' });
         fetchProfile();
       } else { alert(error.message); }
     } catch (err) { console.error(err); }
   };
 
-  const exportPDF = () => { window.print(); };
+  const exportPDF = () => {
+    try {
+      const doc = new jsPDF();
+      
+      doc.setFontSize(18);
+      doc.setTextColor(26, 54, 93);
+      doc.text(`Ledger (Passbook) - ${labour.name}`, 14, 22);
+      
+      doc.setFontSize(10);
+      doc.setTextColor(100, 100, 100);
+      doc.text(`Generated on: ${new Date().toLocaleString()}`, 14, 30);
+      
+      const head = [['Date', 'Description', 'Debit', 'Credit', 'Balance']];
+      
+      const body = calculatedHistory.map(h => [
+        getDisplayDate(h.date),
+        h.type,
+        h.debit,
+        h.credit,
+        h.balance
+      ]);
 
-  const exportCSV = () => {
-    const headers = ['Date', 'Description', 'Debit', 'Credit', 'Balance'];
-    const rows = calculatedHistory.map(h => [h.date, h.type, h.debit, h.credit, h.balance].join(','));
-    const csvContent = "data:text/csv;charset=utf-8," + [headers.join(','), ...rows].join('\n');
-    const encodedUri = encodeURI(csvContent);
-    const link = document.createElement("a");
-    link.setAttribute("href", encodedUri);
-    link.setAttribute("download", `ledger_${labour.name.replace(' ', '_')}.csv`);
-    document.body.appendChild(link);
-    link.click();
+      autoTable(doc, {
+        startY: 40,
+        head: head,
+        body: body,
+        theme: 'striped',
+        headStyles: { fillColor: [20, 155, 142] },
+        styles: { fontSize: 8 },
+        alternateRowStyles: { fillColor: [248, 249, 250] }
+      });
+
+      doc.save(`ledger_${labour.name.replace(' ', '_')}.pdf`);
+    } catch (err) {
+      console.error("PDF Export Error", err);
+    }
+  };
+
+  const exportExcel = () => {
+    const data = calculatedHistory.map(h => ({
+      Date: getDisplayDate(h.date),
+      Description: h.type,
+      Debit: h.debit,
+      Credit: h.credit,
+      Balance: h.balance
+    }));
+    const worksheet = XLSX.utils.json_to_sheet(data);
+    const workbook = XLSX.utils.book_new();
+    XLSX.utils.book_append_sheet(workbook, worksheet, "Ledger");
+    XLSX.writeFile(workbook, `ledger_${labour.name.replace(' ', '_')}.xlsx`);
   };
 
   return (
-    <div className="max-w-4xl mx-auto px-4 pt-4 pb-24 space-y-4">
+    <div className="w-full max-w-4xl mx-auto px-4 pt-4 pb-24 space-y-4">
       {/* Header Profile Card */}
       <div className="bg-surface-bright rounded-lg shadow-sm border border-outline-variant p-4 flex flex-col gap-4 relative overflow-hidden print-no-break">
         <div className={`absolute top-0 right-0 px-3 py-1 rounded-bl-lg text-xs font-bold text-white shadow-sm ${labour.status === 'Active' ? 'bg-success' : 'bg-error'}`}>
@@ -210,12 +307,12 @@ export function Profile({ worker, onNavigate }: Readonly<ProfileProps>) {
         </div>
       </div>
 
-      <div className="flex bg-surface-container-low rounded-lg p-1 border border-outline-variant overflow-x-auto print:hidden">
-        {['overview', 'attendance', 'payments', 'deductions', 'history'].map(tab => (
+      <div className="grid grid-cols-4 sm:flex bg-surface-container-low rounded-lg p-1 border border-outline-variant print:hidden gap-1">
+        {['overview', 'payments', 'deductions', 'history'].map(tab => (
           <button 
             key={tab}
             onClick={() => setActiveTab(tab as any)}
-            className={`flex-1 min-w-[100px] text-center text-xs font-bold py-2 px-3 rounded-md uppercase tracking-wide capitalize ${activeTab === tab ? 'bg-primary text-white shadow-sm' : 'text-on-surface-variant hover:bg-surface-bright transition-colors'}`}
+            className={`w-full sm:flex-1 text-center text-[10px] sm:text-xs font-bold py-2 px-1 sm:px-3 rounded-md uppercase tracking-wide ${activeTab === tab ? 'bg-primary text-white shadow-sm' : 'text-on-surface-variant hover:bg-surface-bright transition-colors'}`}
           >
             {tab}
           </button>
@@ -276,44 +373,42 @@ export function Profile({ worker, onNavigate }: Readonly<ProfileProps>) {
       {activeTab === 'attendance' && (
         <div className="space-y-4">
           <form className="bg-surface-bright rounded-lg border border-outline-variant p-4 flex flex-col gap-3" onSubmit={submitAttendance}>
-             <h3 className="text-sm font-bold border-b border-outline-variant pb-2">Record Monthly Attendance</h3>
-             <div className="grid grid-cols-2 gap-4">
+             <h3 className="text-sm font-bold border-b border-outline-variant pb-2">Record Manual Attendance</h3>
+             <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                <div>
-                 <label className="text-xs font-bold mb-1 block text-on-surface-variant">Month</label>
-                 <input type="month" className="w-full border border-outline-variant rounded p-2 text-sm bg-surface-container-low focus:border-primary outline-none" value={selectedMonth} onChange={e => setSelectedMonth(e.target.value)} required/>
+                 <label className="text-xs font-bold mb-1 block text-on-surface-variant">Selected Month</label>
+                 <input type="month" className="w-full border border-outline-variant rounded p-2 text-sm bg-surface-container-low font-bold cursor-not-allowed text-on-surface-variant" value={selectedMonth} disabled/>
+                 <p className="text-[10px] text-on-surface-variant mt-1.5 font-medium leading-snug">To change the month, use the selector in the Overview tab.</p>
                </div>
                <div>
-                 <label className="text-xs font-bold mb-1 block text-on-surface-variant">Total Days Present</label>
-                 <input type="number" step="0.5" min="0" max="31" className="w-full border border-outline-variant rounded p-2 text-sm bg-surface-container-low focus:border-primary outline-none" value={attendanceForm.days} onChange={e => setAttendanceForm({...attendanceForm, days: e.target.value})} placeholder="e.g. 26.5" required/>
+                 <label className="text-xs font-bold mb-1 block text-on-surface-variant">Days Present</label>
+                 <input type="number" step="0.5" className="w-full border border-outline-variant rounded p-2 text-sm bg-surface-container-low focus:border-primary outline-none" value={attendanceForm.days} onChange={e => setAttendanceForm({...attendanceForm, days: e.target.value})} required/>
                </div>
              </div>
-             <button type="submit" className="bg-primary text-white py-2 rounded-md justify-center flex items-center font-bold text-sm gap-2">
-               <Save className="w-4 h-4"/> Save Attendance for {selectedMonth}
+             <button type="submit" className="bg-primary text-white py-2 rounded-md justify-center flex items-center font-bold text-sm gap-2 mt-2">
+               <FileText className="w-4 h-4"/> Record Attendance
              </button>
           </form>
-
           <div className="mt-6 space-y-3">
-             <h3 className="text-sm font-bold text-on-surface">Attendance History</h3>
+             <h3 className="text-sm font-bold text-on-surface">Recorded Manual Attendance</h3>
              {attendance.map(a => (
-               <div key={a.id} className="bg-surface-bright p-3 rounded-lg border border-outline-variant flex justify-between items-center shadow-sm hover:shadow-md transition-shadow">
+               <div key={a.id} className="bg-surface-bright p-3 rounded-lg border border-outline-variant flex justify-between items-center shadow-sm">
                  <div>
-                    <p className="text-xs font-bold text-on-surface">{a.month}/{a.year}</p>
-                    <p className="text-[11px] text-on-surface-variant font-medium mt-0.5">{a.days} days present</p>
+                    <p className="text-xs font-bold text-on-surface">{a.year}-{a.month.toString().padStart(2, '0')}</p>
                  </div>
-                 <div className="text-right">
-                    <p className="text-sm font-extrabold text-primary">₹{(Number(a.days) * Number(labour.dailyRate)).toLocaleString()}</p>
+                 <div className="flex items-center gap-4 text-right">
+                    <p className="text-sm font-extrabold text-primary">{Number(a.days).toFixed(1)} Days</p>
                  </div>
                </div>
              ))}
              {attendance.length === 0 && (
                <div className="p-4 text-center text-on-surface-variant text-xs border border-outline-variant border-dashed rounded-lg bg-surface-bright">
-                 No attendance records found.
+                 No manual attendance recorded.
                </div>
              )}
           </div>
         </div>
       )}
-
       {activeTab === 'payments' && (
         <div className="space-y-4">
           <form className="bg-surface-bright rounded-lg border border-outline-variant p-4 flex flex-col gap-3" onSubmit={submitPayment}>
@@ -341,7 +436,7 @@ export function Profile({ worker, onNavigate }: Readonly<ProfileProps>) {
                </div>
              </div>
              <button type="submit" className="bg-success text-white py-2 rounded-md justify-center flex items-center font-bold text-sm gap-2">
-               <IndianRupee className="w-4 h-4"/> Add Payment
+               <IndianRupee className="w-4 h-4"/> {paymentForm.id ? 'Update Payment' : 'Add Payment'}
              </button>
           </form>
           <div className="mt-6 space-y-3">
@@ -349,14 +444,24 @@ export function Profile({ worker, onNavigate }: Readonly<ProfileProps>) {
              {payments.map(p => (
                <div key={p.id} className="bg-surface-bright p-3 rounded-lg border border-outline-variant flex justify-between items-center shadow-sm hover:shadow-md transition-shadow">
                  <div>
-                    <p className="text-xs font-bold text-on-surface">{p.point_date}</p>
+                    <p className="text-xs font-bold text-on-surface">{getDisplayDate(p.point_date)}</p>
                     <p className="text-[11px] text-on-surface-variant mt-0.5">
                       <span className="font-bold text-on-surface">{p.mode}</span>
                       {p.notes && ` • ${p.notes}`}
                     </p>
                  </div>
-                 <div className="text-right">
+                 <div className="flex items-center gap-4 text-right">
                     <p className="text-sm font-extrabold text-success">₹{Number(p.amount).toLocaleString()}</p>
+                    <button 
+                      onClick={() => {
+                        window.scrollTo({ top: 0, behavior: 'smooth' });
+                        setPaymentForm({ id: p.id, date: p.point_date, amount: p.amount.toString(), mode: p.mode || 'Cash', notes: p.notes || '' });
+                      }}
+                      className="p-1.5 text-on-surface-variant hover:text-success hover:bg-success/10 rounded-md transition-colors"
+                      title="Edit Payment"
+                    >
+                      <Edit className="w-4 h-4" />
+                    </button>
                  </div>
                </div>
              ))}
@@ -388,7 +493,7 @@ export function Profile({ worker, onNavigate }: Readonly<ProfileProps>) {
                </div>
              </div>
              <button type="submit" className="bg-error text-white py-2 rounded-md justify-center flex items-center font-bold text-sm gap-2">
-               <Save className="w-4 h-4"/> Add Deduction
+               <Save className="w-4 h-4"/> {deductionForm.id ? 'Update Deduction' : 'Add Deduction'}
              </button>
           </form>
           <div className="mt-6 space-y-3">
@@ -396,11 +501,21 @@ export function Profile({ worker, onNavigate }: Readonly<ProfileProps>) {
              {deductions.map(d => (
                <div key={d.id} className="bg-surface-bright p-3 rounded-lg border border-outline-variant flex justify-between items-center shadow-sm hover:shadow-md transition-shadow">
                  <div>
-                    <p className="text-xs font-bold text-on-surface">{d.point_date}</p>
+                    <p className="text-xs font-bold text-on-surface">{getDisplayDate(d.point_date)}</p>
                     <p className="text-[11px] text-on-surface-variant font-medium mt-0.5">{d.reason}</p>
                  </div>
-                 <div className="text-right">
+                 <div className="flex items-center gap-4 text-right">
                     <p className="text-sm font-extrabold text-error">₹{Number(d.amount).toLocaleString()}</p>
+                    <button 
+                      onClick={() => {
+                        window.scrollTo({ top: 0, behavior: 'smooth' });
+                        setDeductionForm({ id: d.id, date: d.point_date, amount: d.amount.toString(), reason: d.reason || '' });
+                      }}
+                      className="p-1.5 text-on-surface-variant hover:text-error hover:bg-error/10 rounded-md transition-colors"
+                      title="Edit Deduction"
+                    >
+                      <Edit className="w-4 h-4" />
+                    </button>
                  </div>
                </div>
              ))}
@@ -420,8 +535,8 @@ export function Profile({ worker, onNavigate }: Readonly<ProfileProps>) {
               <FileSpreadsheet className="w-4 h-4 text-on-surface-variant" /> Ledger (Passbook)
             </h3>
             <div className="flex gap-2 print:hidden">
-              <button onClick={exportCSV} className="flex items-center gap-1.5 text-success text-xs font-bold py-1.5 px-3 bg-success/10 rounded-md hover:bg-success/20 transition-colors uppercase tracking-wider">
-                <FileSpreadsheet className="w-3.5 h-3.5" /> CSV
+              <button onClick={exportExcel} className="flex items-center gap-1.5 text-success text-xs font-bold py-1.5 px-3 bg-success/10 rounded-md hover:bg-success/20 transition-colors uppercase tracking-wider">
+                <FileSpreadsheet className="w-3.5 h-3.5" /> EXCEL
               </button>
               <button onClick={exportPDF} className="flex items-center gap-1.5 text-primary text-xs font-bold py-1.5 px-3 bg-primary/10 rounded-md hover:bg-primary/20 transition-colors uppercase tracking-wider">
                 <Download className="w-3.5 h-3.5" /> PDF
@@ -429,7 +544,7 @@ export function Profile({ worker, onNavigate }: Readonly<ProfileProps>) {
             </div>
           </div>
 
-          <div className="overflow-x-auto no-scrollbar">
+          <div className="overflow-x-auto custom-scrollbar">
             <table className="w-full text-left border-collapse text-xs min-w-[500px]">
               <thead className="bg-surface-container-low/50 border-b-2 border-outline-variant text-[10px] uppercase print:bg-gray-100 print:text-black">
                 <tr>
@@ -443,7 +558,7 @@ export function Profile({ worker, onNavigate }: Readonly<ProfileProps>) {
               <tbody className="divide-y divide-outline-variant/60 font-medium text-xs print:divide-gray-400">
                 {calculatedHistory.map((txn, idx) => (
                    <tr key={idx} className="hover:bg-surface-container-low transition-colors print:border-b print:border-gray-300">
-                    <td className="p-3 border-r border-outline-variant/30 whitespace-nowrap text-on-surface-variant print:border-gray-300">{txn.date}</td>
+                    <td className="p-3 border-r border-outline-variant/30 whitespace-nowrap text-on-surface-variant print:border-gray-300">{getDisplayDate(txn.date)}</td>
                     <td className="p-3 border-r border-outline-variant/30 print:border-gray-300">{txn.type}</td>
                     <td className="p-3 border-r border-outline-variant/30 text-right text-error font-bold print:border-gray-300 print:text-black">
                       {txn.debit > 0 ? `₹${txn.debit.toLocaleString()}` : ''}

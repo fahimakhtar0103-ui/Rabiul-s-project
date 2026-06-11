@@ -1,6 +1,7 @@
 import { useState, useEffect } from 'react';
 import { Search, Save, Download, FileSpreadsheet, AlertTriangle, CheckCircle2 } from 'lucide-react';
 import { supabase } from '../lib/supabase';
+import * as XLSX from 'xlsx';
 
 export function Settlement() {
   const [workers, setWorkers] = useState<any[]>([]);
@@ -23,14 +24,18 @@ export function Settlement() {
     
     try {
       const laboursRes = await supabase.from('labour').select('*, site(*)').eq('is_archived', false).order('id', { ascending: false });
-      if (laboursRes.error) throw laboursRes.error;
+      if (laboursRes.error) {
+        console.error("Labour fetch error:", laboursRes.error);
+        alert("Error fetching labours: " + laboursRes.error.message);
+        throw laboursRes.error;
+      }
       
       const labours = laboursRes.data || [];
       
       const entriesRes = await supabase.from('monthly_entries').select('*').eq('month', selectedMonth);
       
       if (entriesRes.error) {
-        if (entriesRes.error.code === '42P01') {
+        if (entriesRes.error.code === '42P01' || entriesRes.error.code === 'PGRST205') {
           // Table doesn't exist
           setDbError(true);
           setLoading(false);
@@ -69,6 +74,39 @@ export function Settlement() {
 
   const handleUpdate = (workerId: string | number, field: string, value: number) => {
     setWorkers(prev => prev.map(w => w.id === workerId ? { ...w, [field]: value } : w));
+  };
+
+  const exportExcel = () => {
+    try {
+      const data = workers.map((w: any) => {
+        const grossSalary = w.dailyRate * (w.attendance_days || 0);
+        const totalDeductions = (w.ration || 0) + (w.pocket_money || 0) + (w.other_deduction || 0);
+        const netSalary = grossSalary - totalDeductions;
+        const closingDue = netSalary - (w.payments_made || 0);
+        
+        return {
+          'ID': w.displayId,
+          'Name': w.name,
+          'Site': w.site,
+          'Daily Rate': w.dailyRate,
+          'Att. Days': w.attendance_days || 0,
+          'Gross Salary': grossSalary,
+          'Ration': w.ration || 0,
+          'Pocket Money': w.pocket_money || 0,
+          'Other Deductions': w.other_deduction || 0,
+          'Net Salary': netSalary,
+          'Payments Made': w.payments_made || 0,
+          'Closing Due': closingDue
+        };
+      });
+
+      const worksheet = XLSX.utils.json_to_sheet(data);
+      const workbook = XLSX.utils.book_new();
+      XLSX.utils.book_append_sheet(workbook, worksheet, "Settlement");
+      XLSX.writeFile(workbook, `monthly_settlement_${selectedMonth}.xlsx`);
+    } catch (err) {
+      console.error("Export error", err);
+    }
   };
 
   const handleSave = async () => {
@@ -169,7 +207,7 @@ export function Settlement() {
                  {saveStatus.message}
               </span>
             )}
-            <button onClick={() => window.print()} className="flex-1 md:flex-none justify-center bg-surface-container hover:bg-surface-container-high text-on-surface px-4 py-2 border border-outline-variant/50 rounded-md font-semibold flex items-center gap-2 shadow-sm transition-all text-xs" disabled={dbError || saveStatus.saving}>
+            <button onClick={exportExcel} className="flex-1 md:flex-none justify-center bg-surface-container hover:bg-surface-container-high text-on-surface px-4 py-2 border border-outline-variant/50 rounded-md font-semibold flex items-center gap-2 shadow-sm transition-all text-xs" disabled={dbError || saveStatus.saving}>
               <FileSpreadsheet className="w-4 h-4 text-success" /> Export Excel
             </button>
             <button onClick={handleSave} className="flex-1 md:flex-none justify-center bg-primary hover:bg-primary/90 text-white px-4 py-2 rounded-md font-semibold flex items-center gap-2 shadow-sm transition-all text-xs border border-transparent disabled:opacity-50" disabled={dbError || saveStatus.saving || loading}>
@@ -192,7 +230,7 @@ export function Settlement() {
 
       {!dbError && (
         <div className="bg-surface-bright border border-outline-variant rounded-lg shadow-sm overflow-hidden flex flex-col w-full relative">
-          <div className="overflow-x-auto no-scrollbar relative w-full touch-pan-x">
+          <div className="overflow-x-auto custom-scrollbar relative w-full touch-pan-x">
             {loading ? (
                <div className="p-8 text-center text-sm font-medium text-on-surface-variant">Loading data...</div>
             ) : (

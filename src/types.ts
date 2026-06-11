@@ -39,11 +39,27 @@ export interface Deduction {
   reason: string | null;
 }
 
+export interface MonthlyEntry {
+  id: number;
+  labourId: number;
+  month: string;
+  attendance_days: number;
+  daily_rate: number;
+  ration: number;
+  pocket_money: number;
+  other_deduction: number;
+  gross_salary: number;
+  total_deductions: number;
+  net_salary: number;
+  payments_made: number;
+}
+
 export interface LabourProfileData {
   labour: Labour;
   attendance: Attendance[];
   payments: Payment[];
   deductions: Deduction[];
+  monthlyEntries?: MonthlyEntry[];
 }
 
 export interface Worker extends Labour {}; // Aliasing for existing component props temporarily if needed

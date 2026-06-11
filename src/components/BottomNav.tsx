@@ -2,7 +2,7 @@ import {
   LayoutDashboard,
   ClipboardList,
   Users,
-  IndianRupee,
+  Building2,
   BarChart3,
 } from 'lucide-react';
 import { ViewState } from '../types';
@@ -17,11 +17,12 @@ export function BottomNav({ currentView, onNavigate }: Readonly<BottomNavProps>)
     { id: 'dashboard', icon: LayoutDashboard, label: 'Dashboard' },
     { id: 'settlement', icon: ClipboardList, label: 'Settlement' },
     { id: 'labours', icon: Users, label: 'Labours' },
+    { id: 'sites', icon: Building2, label: 'Sites' },
     { id: 'reports', icon: BarChart3, label: 'Reports' },
   ];
 
   return (
-    <nav className="fixed bottom-0 w-full z-50 flex justify-around items-center bg-surface-bright h-[68px] px-2 border-t border-outline-variant shadow-[0_-4px_10px_rgba(0,0,0,0.03)] pb-safe">
+    <nav className="fixed bottom-0 w-full z-50 flex justify-around items-center bg-surface-bright h-[68px] px-2 border-t border-outline-variant shadow-[0_-4px_10px_rgba(0,0,0,0.03)] pb-safe print:hidden">
       {items.map((item) => {
         const Icon = item.icon;
         const isActive = currentView === item.id || (item.id === 'labours' && currentView === 'profile') || (item.id === 'labours' && currentView === 'payment');

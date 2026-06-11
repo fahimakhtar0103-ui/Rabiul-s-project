@@ -1,4 +1,7 @@
 import { useState, useEffect } from 'react';
+import { AnimatePresence } from 'motion/react';
+import { supabase } from './lib/supabase';
+import { Session } from '@supabase/supabase-js';
 import { ViewState, Worker } from './types';
 import { Header } from './components/Header';
 import { BottomNav } from './components/BottomNav';
@@ -8,10 +11,29 @@ import { Settlement } from './views/Settlement';
 import { Payment } from './views/Payment';
 import { Profile } from './views/Profile';
 import { Reports } from './views/Reports';
+import { SiteManagement } from './views/SiteManagement';
+import { SplashScreen } from './components/SplashScreen';
+import { Login } from './views/Login';
 
 export default function App() {
   const [currentView, setCurrentView] = useState<ViewState>('dashboard');
   const [selectedWorker, setSelectedWorker] = useState<Worker | null>(null);
+  const [showSplash, setShowSplash] = useState(true);
+  const [session, setSession] = useState<Session | null>(null);
+
+  useEffect(() => {
+    supabase.auth.getSession().then(({ data: { session } }) => {
+      setSession(session);
+    });
+
+    const {
+      data: { subscription },
+    } = supabase.auth.onAuthStateChange((_event, session) => {
+      setSession(session);
+    });
+
+    return () => subscription.unsubscribe();
+  }, []);
 
   // Smooth scroll to top on view change
   useEffect(() => {
@@ -37,41 +59,48 @@ export default function App() {
   };
 
   return (
-    <div className="min-h-screen bg-background text-on-surface font-sans flex flex-col relative w-full overflow-x-hidden">
-      <Header currentView={currentView} onNavigate={handleNavigate} />
-      
-      <main className="flex-grow flex flex-col items-stretch w-full relative">
-        {currentView === 'dashboard' && <Dashboard />}
-        {currentView === 'settlement' && <Settlement />}
-        {currentView === 'labours' && <LabourList onNavigate={handleNavigate} />}
-        {currentView === 'payment' && (
-          <Payment 
-            onSuccess={handlePaymentSuccess} 
-            worker={selectedWorker} 
-          />
-        )}
-        {currentView === 'profile' && (
-          <Profile 
-            worker={selectedWorker} 
-            onNavigate={handleNavigate} 
-          />
-        )}
-        {currentView === 'reports' && (
-          <Reports />
-        )}
-        {/* Fillers for unimplemented tabs to prevent blank screens if clicked */}
-        {(currentView === 'sites') && (
-           <div className="flex-grow flex items-center justify-center p-8 text-on-surface-variant italic text-sm">
-              View coming soon.
-           </div>
-        )}
-      </main>
+    <>
+      <AnimatePresence mode="wait">
+        {showSplash && <SplashScreen key="splash" onComplete={() => setShowSplash(false)} />}
+      </AnimatePresence>
 
-      {/* Hide bottom nav on internal deeply nested pages like payment or profile to focus task */}
-      {(currentView !== 'payment' && currentView !== 'profile') && (
-        <BottomNav currentView={currentView} onNavigate={handleNavigate} />
+      {!showSplash && !session && (
+        <Login />
       )}
-    </div>
+
+      {!showSplash && session && (
+        <div className="min-h-screen bg-background text-on-surface font-sans flex flex-col relative w-full overflow-x-hidden">
+          <Header currentView={currentView} onNavigate={handleNavigate} />
+          
+          <main className="flex-1 w-full max-w-full overflow-x-hidden relative">
+            {currentView === 'dashboard' && <Dashboard />}
+            {currentView === 'settlement' && <Settlement />}
+            {currentView === 'labours' && <LabourList onNavigate={handleNavigate} />}
+            {currentView === 'payment' && (
+              <Payment 
+                onSuccess={handlePaymentSuccess} 
+                worker={selectedWorker} 
+              />
+            )}
+            {currentView === 'profile' && (
+              <Profile 
+                worker={selectedWorker} 
+                onNavigate={handleNavigate} 
+              />
+            )}
+            {currentView === 'reports' && (
+              <Reports />
+            )}
+            {currentView === 'sites' && <SiteManagement />}
+          </main>
+
+          {/* Hide bottom nav on internal deeply nested pages like payment or profile to focus task */}
+          {(currentView !== 'payment' && currentView !== 'profile') && (
+            <BottomNav currentView={currentView} onNavigate={handleNavigate} />
+          )}
+        </div>
+      )}
+    </>
   );
 }
 

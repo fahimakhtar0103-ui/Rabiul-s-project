@@ -1,16 +1,19 @@
 import { useState } from 'react';
-import { Banknote, QrCode, Landmark, Delete } from 'lucide-react';
-import { Worker } from '../types';
+import { Banknote, QrCode, Landmark, Delete, Loader2 } from 'lucide-react';
+import { supabase } from '../lib/supabase';
 
 interface PaymentProps {
   onSuccess: () => void;
-  worker?: Worker | null;
+  worker?: any;
 }
 
 export function Payment({ onSuccess, worker }: Readonly<PaymentProps>) {
   const [amount, setAmount] = useState<string>('0');
   const [mode, setMode] = useState<'Cash' | 'UPI' | 'Bank'>('Cash');
   const [entryType, setEntryType] = useState<'Advance' | 'Payment'>('Advance');
+  const [date, setDate] = useState(new Date().toISOString().split('T')[0]);
+  const [notes, setNotes] = useState('');
+  const [loading, setLoading] = useState(false);
 
   const updateDisplay = () => amount === "" ? "0" : amount;
 
@@ -39,16 +42,47 @@ export function Payment({ onSuccess, worker }: Readonly<PaymentProps>) {
     });
   };
 
-  const handleConfirm = () => {
+  const handleConfirm = async () => {
     const num = parseFloat(amount);
     if (!num || num <= 0) {
       alert("Please enter a valid amount.");
       return;
     }
-    onSuccess();
+    if (!worker) {
+      alert("No worker selected.");
+      return;
+    }
+
+    setLoading(true);
+    try {
+      if (entryType === 'Advance') {
+        const { error } = await supabase.from('deduction').insert([{
+          labourId: worker.id,
+          point_date: date,
+          amount: num,
+          reason: notes || 'Advance'
+        }]);
+        if (error) throw error;
+      } else {
+        const { error } = await supabase.from('payment').insert([{
+          labourId: worker.id,
+          point_date: date,
+          amount: num,
+          mode,
+          notes
+        }]);
+        if (error) throw error;
+      }
+      onSuccess();
+    } catch (err: any) {
+      console.error(err);
+      alert(err.message || 'Error occurred');
+    } finally {
+      setLoading(false);
+    }
   };
 
-  const outstanding = worker ? worker.previousDue : 0;
+  const outstanding = worker?.previousDue || 0;
 
   return (
     <div className="flex-grow flex flex-col p-4 gap-4 max-w-md mx-auto w-full pb-24 h-full">
@@ -77,7 +111,7 @@ export function Payment({ onSuccess, worker }: Readonly<PaymentProps>) {
       {worker && (
         <div className="flex justify-between items-center text-sm border-b border-outline-variant/60 pb-3 mb-4">
           <span className="font-bold text-on-surface tracking-tight text-lg">{worker.name}</span>
-          <span className="text-[10px] text-on-surface-variant font-bold uppercase tracking-wider bg-surface-container px-2 py-0.5 rounded-full">{worker.type}</span>
+          <span className="text-[10px] text-on-surface-variant font-bold uppercase tracking-wider bg-surface-container px-2 py-0.5 rounded-full">{worker.role || worker.type}</span>
         </div>
       )}
 
@@ -107,7 +141,8 @@ export function Payment({ onSuccess, worker }: Readonly<PaymentProps>) {
           <label className="block text-[10px] font-bold text-on-surface-variant uppercase tracking-wider mb-1.5 ">Date</label>
           <input 
             type="date"
-            defaultValue={new Date().toISOString().split('T')[0]}
+            value={date}
+            onChange={(e) => setDate(e.target.value)}
             className="w-full p-2.5 bg-surface-container-low border border-outline-variant rounded-md text-xs font-semibold text-on-surface outline-none focus:ring-2 focus:ring-primary/20 focus:border-primary transition-all"
           />
         </div>
@@ -115,6 +150,8 @@ export function Payment({ onSuccess, worker }: Readonly<PaymentProps>) {
           <label className="block text-[10px] font-bold text-on-surface-variant uppercase tracking-wider mb-1.5">Remarks</label>
           <input 
             type="text"
+            value={notes}
+            onChange={(e) => setNotes(e.target.value)}
             placeholder="Optional notes..."
             className="w-full p-2.5 bg-surface-container-low border border-outline-variant rounded-md text-xs font-semibold text-on-surface outline-none focus:ring-2 focus:ring-primary/20 focus:border-primary transition-all"
           />
@@ -187,9 +224,10 @@ export function Payment({ onSuccess, worker }: Readonly<PaymentProps>) {
           </button>
           <button 
             onClick={handleConfirm}
-            className="flex-1 py-4 bg-primary text-white text-sm uppercase tracking-widest font-bold rounded-md shadow-md active:scale-[0.99] hover:bg-primary-container hover:text-on-primary-container transition-all"
+            disabled={loading}
+            className="flex-1 py-4 bg-primary text-white text-sm uppercase tracking-widest font-bold rounded-md shadow-md active:scale-[0.99] hover:bg-primary-container hover:text-on-primary-container transition-all disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2"
           >
-            Confirm Entry
+            {loading ? <Loader2 className="w-5 h-5 animate-spin"/> : 'Confirm Entry'}
           </button>
         </div>
       </div>
