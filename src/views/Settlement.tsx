@@ -229,124 +229,213 @@ export function Settlement() {
       </div>
 
       {!dbError && (
-        <div className="bg-surface-bright border border-outline-variant rounded-lg shadow-sm overflow-hidden flex flex-col w-full relative">
-          <div className="overflow-x-auto custom-scrollbar relative w-full touch-pan-x">
-            {loading ? (
-               <div className="p-8 text-center text-sm font-medium text-on-surface-variant">Loading data...</div>
-            ) : (
-               <table className="text-left border-collapse w-full min-w-[1100px]">
-                 <thead className="bg-surface-container-low border-b-2 border-outline-variant text-[10px] uppercase">
-                  <tr>
-                    <th className="p-3 font-semibold text-on-surface-variant border-r border-outline-variant/50 sticky left-0 bg-surface-container-low z-20 shadow-[2px_0_5px_rgba(0,0,0,0.02)] min-w-[160px]">Labour Details</th>
-                    <th className="p-3 font-semibold text-primary border-r border-outline-variant/50 text-center w-28 bg-primary/5">Att. Days</th>
-                    <th className="p-3 font-semibold text-on-surface-variant border-r border-outline-variant/50 text-right w-24">Daily Rate</th>
-                    <th className="p-3 font-semibold text-on-surface-variant border-r border-outline-variant/50 text-right w-24 bg-surface-container-low/50">Gross Salary</th>
-                    <th className="p-3 font-semibold text-error border-r border-outline-variant/50 text-center w-56 bg-error/5">
-                      Deductions<br/><span className="lowercase text-[9px] font-medium tracking-normal">(Ration, Pocket, Other)</span>
-                    </th>
-                    <th className="p-3 font-semibold border-r border-outline-variant/50 text-right w-24">Net Salary</th>
-                    <th className="p-3 font-semibold text-success border-r border-outline-variant/50 text-center w-32 bg-success/5">Payments</th>
-                    <th className="p-3 font-bold text-inverse-surface bg-inverse-surface/5 text-right w-28">Closing Due</th>
-                  </tr>
-                </thead>
-                <tbody className="divide-y divide-outline-variant font-medium text-sm">
-                  {filteredWorkers.map((w) => {
-                    const grossSalary = w.dailyRate * (w.attendance_days || 0);
-                    const totalDeductions = (w.ration || 0) + (w.pocket_money || 0) + (w.other_deduction || 0);
-                    const netSalary = grossSalary - totalDeductions;
-                    const closingDue = netSalary - (w.payments_made || 0);
-                    
-                    return (
-                      <tr key={w.id} className="hover:bg-surface-container-low transition-colors group">
-                        <td className="p-3 border-r border-outline-variant/50 sticky left-0 bg-surface-bright group-hover:bg-surface-container-low z-10 shadow-[2px_0_5px_rgba(0,0,0,0.02)]">
-                          <p className="text-sm font-bold text-on-surface truncate whitespace-nowrap">{w.name}</p>
-                          <p className="text-[10px] text-on-surface-variant uppercase tracking-wider truncate mt-0.5 whitespace-nowrap">{w.displayId} • {w.site}</p>
-                        </td>
-                        
-                        <td className="p-2 border-r border-outline-variant/50 text-center align-middle bg-primary/5">
-                           <input 
-                              type="number" 
-                              value={w.attendance_days === 0 && !w._touched ? '' : w.attendance_days}
-                              onFocus={() => handleUpdate(w.id, '_touched', 1)}
-                              onChange={(e) => handleUpdate(w.id, 'attendance_days', parseFloat(e.target.value) || 0)}
-                              className="w-14 text-center border p-1 text-sm font-bold bg-surface-bright border-primary/30 rounded focus:border-primary focus:ring-1 focus:ring-primary shadow-inner outline-none transition-all text-primary"
-                              step="0.5" min="0" max="31"
-                            />
-                        </td>
-                        
-                        <td className="p-3 border-r border-outline-variant/50 text-right align-middle">
-                          <input 
-                              type="number" 
-                              value={w.dailyRate}
-                              onChange={(e) => handleUpdate(w.id, 'dailyRate', parseFloat(e.target.value) || 0)}
-                              className="w-16 text-right border p-1 border-outline-variant/30 text-xs font-bold bg-surface-bright rounded focus:border-on-surface focus:ring-1 focus:ring-on-surface shadow-inner outline-none transition-all"
-                            />
-                        </td>
-
-                        <td className="p-3 border-r border-outline-variant/50 text-right font-bold text-on-surface bg-surface-container-low/50 whitespace-nowrap">
-                          ₹{grossSalary.toLocaleString()}
-                        </td>
-                        
-                        <td className="p-2 border-r border-outline-variant/50 text-center align-middle bg-error/5">
-                            <div className="flex gap-1 justify-center">
-                              <div className="flex flex-col items-center">
-                                 <input 
-                                    title="Ration"
-                                    type="number" value={w.ration || ''} onChange={(e) => handleUpdate(w.id, 'ration', parseFloat(e.target.value) || 0)}
-                                    className="w-[50px] text-center border border-error/30 p-1 text-xs font-bold bg-surface-bright rounded text-error focus:border-error focus:ring-1 focus:ring-error shadow-inner outline-none transition-all"
-                                    placeholder="0"
-                                  />
-                                  <span className="text-[8px] text-error font-medium uppercase mt-0.5">Ration</span>
-                              </div>
-                              
-                              <div className="flex flex-col items-center">
-                                  <input 
-                                    title="Pocket Money"
-                                    type="number" value={w.pocket_money || ''} onChange={(e) => handleUpdate(w.id, 'pocket_money', parseFloat(e.target.value) || 0)}
-                                    className="w-[50px] text-center border border-error/30 p-1 text-xs font-bold bg-surface-bright rounded text-error focus:border-error focus:ring-1 focus:ring-error shadow-inner outline-none transition-all"
-                                    placeholder="0"
-                                  />
-                                  <span className="text-[8px] text-error font-medium uppercase mt-0.5">Pocket</span>
-                              </div>
-
-                               <div className="flex flex-col items-center">
-                                  <input 
-                                    title="Other Deductions"
-                                    type="number" value={w.other_deduction || ''} onChange={(e) => handleUpdate(w.id, 'other_deduction', parseFloat(e.target.value) || 0)}
-                                    className="w-[50px] text-center border border-error/30 p-1 text-xs font-bold bg-surface-bright rounded text-error focus:border-error focus:ring-1 focus:ring-error shadow-inner outline-none transition-all"
-                                    placeholder="0"
-                                  />
-                                  <span className="text-[8px] text-error font-medium uppercase mt-0.5">Other</span>
-                               </div>
-                            </div>
-                        </td>
-
-                        <td className="p-3 border-r border-outline-variant/50 text-right font-bold text-on-surface whitespace-nowrap">
-                          ₹{netSalary.toLocaleString()}
-                        </td>
-
-                        <td className="p-2 border-r border-outline-variant/50 text-center align-middle bg-success/5">
+        <>
+          {/* Desktop Spreadsheet View */}
+          <div className="hidden xl:flex bg-surface-bright border border-outline-variant rounded-lg shadow-sm overflow-hidden flex-col w-full relative">
+            <div className="overflow-x-auto custom-scrollbar relative w-full touch-pan-x">
+              {loading ? (
+                 <div className="p-8 text-center text-sm font-medium text-on-surface-variant">Loading data...</div>
+              ) : (
+                 <table className="text-left border-collapse w-full min-w-[1100px]">
+                   <thead className="bg-surface-container-low border-b-2 border-outline-variant text-[10px] uppercase">
+                    <tr>
+                      <th className="p-3 font-semibold text-on-surface-variant border-r border-outline-variant/50 sticky left-0 bg-surface-container-low z-20 shadow-[2px_0_5px_rgba(0,0,0,0.02)] min-w-[160px]">Labour Details</th>
+                      <th className="p-3 font-semibold text-primary border-r border-outline-variant/50 text-center w-28 bg-primary/5">Att. Days</th>
+                      <th className="p-3 font-semibold text-on-surface-variant border-r border-outline-variant/50 text-right w-24">Daily Rate</th>
+                      <th className="p-3 font-semibold text-on-surface-variant border-r border-outline-variant/50 text-right w-24 bg-surface-container-low/50">Gross Salary</th>
+                      <th className="p-3 font-semibold text-error border-r border-outline-variant/50 text-center w-56 bg-error/5">
+                        Deductions<br/><span className="lowercase text-[9px] font-medium tracking-normal">(Ration, Pocket, Other)</span>
+                      </th>
+                      <th className="p-3 font-semibold border-r border-outline-variant/50 text-right w-24">Net Salary</th>
+                      <th className="p-3 font-semibold text-success border-r border-outline-variant/50 text-center w-32 bg-success/5">Payments</th>
+                      <th className="p-3 font-bold text-inverse-surface bg-inverse-surface/5 text-right w-28">Closing Due</th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-outline-variant font-medium text-sm">
+                    {filteredWorkers.map((w) => {
+                      const grossSalary = w.dailyRate * (w.attendance_days || 0);
+                      const totalDeductions = (w.ration || 0) + (w.pocket_money || 0) + (w.other_deduction || 0);
+                      const netSalary = grossSalary - totalDeductions;
+                      const closingDue = netSalary - (w.payments_made || 0);
+                      
+                      return (
+                        <tr key={w.id} className="hover:bg-surface-container-low transition-colors group">
+                          <td className="p-3 border-r border-outline-variant/50 sticky left-0 bg-surface-bright group-hover:bg-surface-container-low z-10 shadow-[2px_0_5px_rgba(0,0,0,0.02)]">
+                            <p className="text-sm font-bold text-on-surface truncate whitespace-nowrap">{w.name}</p>
+                            <p className="text-[10px] text-on-surface-variant uppercase tracking-wider truncate mt-0.5 whitespace-nowrap">{w.displayId} • {w.site}</p>
+                          </td>
+                          
+                          <td className="p-2 border-r border-outline-variant/50 text-center align-middle bg-primary/5">
+                             <input 
+                                type="number" 
+                                value={w.attendance_days === 0 && !w._touched ? '' : w.attendance_days}
+                                onFocus={() => handleUpdate(w.id, '_touched', 1)}
+                                onChange={(e) => handleUpdate(w.id, 'attendance_days', parseFloat(e.target.value) || 0)}
+                                className="w-14 text-center border p-1 text-sm font-bold bg-surface-bright border-primary/30 rounded focus:border-primary focus:ring-1 focus:ring-primary shadow-inner outline-none transition-all text-primary"
+                                step="0.5" min="0" max="31"
+                              />
+                          </td>
+                          
+                          <td className="p-3 border-r border-outline-variant/50 text-right align-middle">
                             <input 
-                              title="Payments Made (Advances + Final)"
-                              type="number" value={w.payments_made || ''} onChange={(e) => handleUpdate(w.id, 'payments_made', parseFloat(e.target.value) || 0)}
-                              className="w-[60px] text-center border border-success/30 p-1 text-sm font-bold bg-surface-bright rounded text-success focus:border-success focus:ring-1 focus:ring-success shadow-inner outline-none mx-auto block transition-all"
-                              placeholder="0"
-                            />
-                        </td>
+                                type="number" 
+                                value={w.dailyRate}
+                                onChange={(e) => handleUpdate(w.id, 'dailyRate', parseFloat(e.target.value) || 0)}
+                                className="w-16 text-right border p-1 border-outline-variant/30 text-xs font-bold bg-surface-bright rounded focus:border-on-surface focus:ring-1 focus:ring-on-surface shadow-inner outline-none transition-all"
+                              />
+                          </td>
+  
+                          <td className="p-3 border-r border-outline-variant/50 text-right font-bold text-on-surface bg-surface-container-low/50 whitespace-nowrap">
+                            ₹{grossSalary.toLocaleString()}
+                          </td>
+                          
+                          <td className="p-2 border-r border-outline-variant/50 text-center align-middle bg-error/5">
+                              <div className="flex gap-1 justify-center">
+                                <div className="flex flex-col items-center">
+                                   <input 
+                                      title="Ration"
+                                      type="number" value={w.ration || ''} onChange={(e) => handleUpdate(w.id, 'ration', parseFloat(e.target.value) || 0)}
+                                      className="w-[50px] text-center border border-error/30 p-1 text-xs font-bold bg-surface-bright rounded text-error focus:border-error focus:ring-1 focus:ring-error shadow-inner outline-none transition-all"
+                                      placeholder="0"
+                                    />
+                                    <span className="text-[8px] text-error font-medium uppercase mt-0.5">Ration</span>
+                                </div>
+                                
+                                <div className="flex flex-col items-center">
+                                    <input 
+                                      title="Pocket Money"
+                                      type="number" value={w.pocket_money || ''} onChange={(e) => handleUpdate(w.id, 'pocket_money', parseFloat(e.target.value) || 0)}
+                                      className="w-[50px] text-center border border-error/30 p-1 text-xs font-bold bg-surface-bright rounded text-error focus:border-error focus:ring-1 focus:ring-error shadow-inner outline-none transition-all"
+                                      placeholder="0"
+                                    />
+                                    <span className="text-[8px] text-error font-medium uppercase mt-0.5">Pocket</span>
+                                </div>
+  
+                                 <div className="flex flex-col items-center">
+                                    <input 
+                                      title="Other Deductions"
+                                      type="number" value={w.other_deduction || ''} onChange={(e) => handleUpdate(w.id, 'other_deduction', parseFloat(e.target.value) || 0)}
+                                      className="w-[50px] text-center border border-error/30 p-1 text-xs font-bold bg-surface-bright rounded text-error focus:border-error focus:ring-1 focus:ring-error shadow-inner outline-none transition-all"
+                                      placeholder="0"
+                                    />
+                                    <span className="text-[8px] text-error font-medium uppercase mt-0.5">Other</span>
+                                 </div>
+                              </div>
+                          </td>
+  
+                          <td className="p-3 border-r border-outline-variant/50 text-right font-bold text-on-surface whitespace-nowrap">
+                            ₹{netSalary.toLocaleString()}
+                          </td>
+  
+                          <td className="p-2 border-r border-outline-variant/50 text-center align-middle bg-success/5">
+                              <input 
+                                title="Payments Made (Advances + Final)"
+                                type="number" value={w.payments_made || ''} onChange={(e) => handleUpdate(w.id, 'payments_made', parseFloat(e.target.value) || 0)}
+                                className="w-[60px] text-center border border-success/30 p-1 text-sm font-bold bg-surface-bright rounded text-success focus:border-success focus:ring-1 focus:ring-success shadow-inner outline-none mx-auto block transition-all"
+                                placeholder="0"
+                              />
+                          </td>
+  
+                          <td className="p-3 border-l-2 border-outline-variant/50 text-right bg-inverse-surface/5 whitespace-nowrap">
+                            <div className={`text-base font-extrabold ${closingDue > 0 ? 'text-primary' : closingDue < 0 ? 'text-error' : 'text-success'}`}>
+                              ₹{closingDue.toLocaleString()}
+                            </div>
+                          </td>
+                        </tr>
+                      );
+                    })}
+                  </tbody>
+                </table>
+              )}
+            </div>
+          </div>
 
-                        <td className="p-3 border-l-2 border-outline-variant/50 text-right bg-inverse-surface/5 whitespace-nowrap">
-                          <div className={`text-base font-extrabold ${closingDue > 0 ? 'text-primary' : closingDue < 0 ? 'text-error' : 'text-success'}`}>
+          {/* Mobile Card View */}
+          <div className="flex xl:hidden flex-col gap-4">
+             {loading ? (
+                <div className="p-8 text-center text-sm font-medium text-on-surface-variant">Loading data...</div>
+             ) : (
+                filteredWorkers.map(w => {
+                  const grossSalary = w.dailyRate * (w.attendance_days || 0);
+                  const totalDeductions = (w.ration || 0) + (w.pocket_money || 0) + (w.other_deduction || 0);
+                  const netSalary = grossSalary - totalDeductions;
+                  const closingDue = netSalary - (w.payments_made || 0);
+              
+                  return (
+                    <div key={w.id} className="bg-surface-bright border border-outline-variant rounded-xl p-4 shadow-sm flex flex-col gap-4 relative overflow-hidden">
+                      <div className="flex justify-between items-start border-b border-outline-variant/50 pb-3">
+                        <div className="max-w-[60%]">
+                          <p className="text-base font-bold text-on-surface truncate">{w.name}</p>
+                          <p className="text-xs text-on-surface-variant font-medium mt-1 truncate">{w.displayId} • {w.site}</p>
+                        </div>
+                        <div className="text-right">
+                          <p className="text-[10px] text-on-surface-variant uppercase tracking-wider font-bold mb-1">Closing Due</p>
+                          <div className={`text-lg font-black ${closingDue > 0 ? 'text-primary' : closingDue < 0 ? 'text-error' : 'text-success'}`}>
                             ₹{closingDue.toLocaleString()}
                           </div>
-                        </td>
-                      </tr>
-                    );
-                  })}
-                </tbody>
-              </table>
-            )}
+                        </div>
+                      </div>
+                      
+                      <div className="grid grid-cols-2 gap-3">
+                        <div className="bg-primary/5 p-2.5 rounded-lg border border-primary/10">
+                          <label className="block text-[10px] text-primary uppercase font-bold mb-1.5">Att. Days</label>
+                          <input 
+                            type="number" 
+                            value={w.attendance_days === 0 && !w._touched ? '' : w.attendance_days}
+                            onFocus={() => handleUpdate(w.id, '_touched', 1)}
+                            onChange={(e) => handleUpdate(w.id, 'attendance_days', parseFloat(e.target.value) || 0)}
+                            className="w-full bg-surface-bright border border-primary/20 p-2 rounded-md text-sm font-bold text-primary outline-none focus:border-primary focus:ring-1 focus:ring-primary shadow-sm"
+                            step="0.5" min="0" max="31"
+                          />
+                        </div>
+                        <div className="bg-surface-container-low p-2.5 rounded-lg border border-outline-variant/50">
+                          <label className="block text-[10px] text-on-surface-variant uppercase font-bold mb-1.5">Daily Rate</label>
+                          <input 
+                            type="number" 
+                            value={w.dailyRate}
+                            onChange={(e) => handleUpdate(w.id, 'dailyRate', parseFloat(e.target.value) || 0)}
+                            className="w-full bg-surface-bright border border-outline-variant/30 p-2 rounded-md text-sm font-bold outline-none focus:border-on-surface focus:ring-1 focus:ring-on-surface shadow-sm"
+                          />
+                        </div>
+                      </div>
+              
+                      <div className="bg-error/5 p-3 rounded-lg border border-error/10">
+                         <label className="block text-[10px] text-error uppercase font-bold mb-2">Deductions</label>
+                         <div className="grid grid-cols-3 gap-2">
+                           <div>
+                             <input type="number" placeholder="0" value={w.ration || ''} onChange={(e) => handleUpdate(w.id, 'ration', parseFloat(e.target.value) || 0)} className="w-full text-center bg-surface-bright border border-error/20 p-2 rounded-md text-xs font-bold text-error outline-none focus:border-error focus:ring-1 focus:ring-error shadow-sm" />
+                             <span className="block text-[9px] text-error font-medium uppercase mt-1.5 text-center">Ration</span>
+                           </div>
+                           <div>
+                             <input type="number" placeholder="0" value={w.pocket_money || ''} onChange={(e) => handleUpdate(w.id, 'pocket_money', parseFloat(e.target.value) || 0)} className="w-full text-center bg-surface-bright border border-error/20 p-2 rounded-md text-xs font-bold text-error outline-none focus:border-error focus:ring-1 focus:ring-error shadow-sm" />
+                             <span className="block text-[9px] text-error font-medium uppercase mt-1.5 text-center">Pocket</span>
+                           </div>
+                           <div>
+                             <input type="number" placeholder="0" value={w.other_deduction || ''} onChange={(e) => handleUpdate(w.id, 'other_deduction', parseFloat(e.target.value) || 0)} className="w-full text-center bg-surface-bright border border-error/20 p-2 rounded-md text-xs font-bold text-error outline-none focus:border-error focus:ring-1 focus:ring-error shadow-sm" />
+                             <span className="block text-[9px] text-error font-medium uppercase mt-1.5 text-center">Other</span>
+                           </div>
+                         </div>
+                      </div>
+              
+                      <div className="flex gap-3 items-end">
+                         <div className="bg-success/5 p-2.5 rounded-lg border border-success/10 flex-1">
+                           <label className="block text-[10px] text-success uppercase font-bold mb-1.5">Payments Made</label>
+                           <input type="number" placeholder="0" value={w.payments_made || ''} onChange={(e) => handleUpdate(w.id, 'payments_made', parseFloat(e.target.value) || 0)} className="w-full bg-surface-bright border border-success/20 p-2 rounded-md text-sm font-bold text-success outline-none focus:border-success focus:ring-1 focus:ring-success shadow-sm" />
+                         </div>
+                         
+                         <div className="text-right p-2 border-l border-outline-variant/30 pl-3">
+                           <p className="text-[10px] text-on-surface-variant font-bold uppercase tracking-wider mb-1">Net Salary</p>
+                           <p className="text-lg font-black text-on-surface leading-none">₹{netSalary.toLocaleString()}</p>
+                           <p className="text-[10px] text-on-surface-variant mt-1">Gross: ₹{grossSalary.toLocaleString()}</p>
+                         </div>
+                      </div>
+              
+                    </div>
+                  );
+                })
+             )}
           </div>
-        </div>
+        </>
       )}
     </div>
   );
