@@ -2,8 +2,10 @@ import React, { useState, useEffect } from 'react';
 import { Building2, Plus, Trash2, MapPin, Save } from 'lucide-react';
 import { supabase } from '../lib/supabase';
 import { Site } from '../types';
+import { useLanguage } from '../lib/LanguageContext';
 
 export function SiteManagement() {
+  const { t } = useLanguage();
   const [sites, setSites] = useState<Site[]>([]);
   const [loading, setLoading] = useState(true);
   const [showAddForm, setShowAddForm] = useState(false);
@@ -90,7 +92,7 @@ export function SiteManagement() {
       <div className="bg-surface-bright rounded-lg shadow-sm border border-outline-variant p-4 flex justify-between items-center">
         <div>
           <h2 className="text-xl font-bold text-on-surface tracking-tight flex items-center gap-2">
-            <Building2 className="w-5 h-5 text-primary" /> Manage Sites
+            <Building2 className="w-5 h-5 text-primary" /> {t('Site Management')}
           </h2>
           <p className="text-xs text-on-surface-variant font-medium mt-1">
             Add or remove your operational sites
@@ -117,7 +119,7 @@ export function SiteManagement() {
       {showAddForm && (
         <form onSubmit={handleAddSite} className="bg-surface-bright rounded-lg shadow-sm border border-outline-variant p-4 space-y-4 animate-in fade-in slide-in-from-top-4">
           <div className="flex justify-between items-center mb-2">
-             <h3 className="text-sm font-bold text-on-surface">Add New Site</h3>
+             <h3 className="text-sm font-bold text-on-surface">{t('Add Site')}</h3>
              <button type="button" onClick={() => setShowAddForm(false)} className="text-on-surface-variant hover:text-on-surface text-xs font-bold font-mono">X</button>
           </div>
           
@@ -147,7 +149,7 @@ export function SiteManagement() {
 
           <div className="pt-2">
             <button type="submit" className="w-full bg-primary text-white font-bold py-2 rounded shadow hover:bg-primary/90 transition-colors text-sm flex items-center justify-center gap-2">
-               <Save className="w-4 h-4" /> Save Site
+               <Save className="w-4 h-4" /> {t('Save')}
             </button>
           </div>
         </form>
@@ -164,7 +166,7 @@ export function SiteManagement() {
             onClick={() => setShowAddForm(true)}
             className="mt-4 px-4 py-2 bg-primary/10 text-primary hover:bg-primary/20 text-xs font-bold rounded-md uppercase tracking-wider"
           >
-            Add Site
+            {t('Add Site')}
           </button>
         </div>
       ) : (
@@ -197,7 +199,7 @@ export function SiteManagement() {
       {deleteId !== null && (
         <div className="fixed inset-0 bg-black/60 z-[100] flex items-center justify-center p-4">
           <div className="bg-surface-bright rounded-lg p-6 max-w-sm w-full shadow-lg border border-outline-variant animate-in zoom-in-95 duration-200">
-            <h3 className="text-lg font-bold text-on-surface mb-2">Delete Site</h3>
+            <h3 className="text-lg font-bold text-on-surface mb-2">{t('Delete')} Site</h3>
             <p className="text-sm text-on-surface-variant mb-6">
               Are you sure you want to delete this site? This action cannot be undone.
             </p>
@@ -213,13 +215,13 @@ export function SiteManagement() {
                 onClick={() => setDeleteId(null)}
                 className="px-4 py-2 text-sm font-bold text-on-surface-variant bg-surface-container hover:bg-surface-container-high rounded-md transition-colors"
               >
-                Cancel
+                {t('Cancel')}
               </button>
               <button 
                 onClick={confirmDelete}
                 className="px-4 py-2 text-sm font-bold text-white bg-error hover:bg-error/90 rounded-md transition-colors"
               >
-                Yes, Delete
+                Yes, {t('Delete')}
               </button>
             </div>
           </div>

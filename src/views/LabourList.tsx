@@ -2,12 +2,14 @@ import React, { useState, useEffect } from 'react';
 import { Search, Filter, History, IndianRupee, UserPlus, X, Edit, Trash2, Archive, ArchiveRestore } from 'lucide-react';
 import { ViewState, Labour, Site } from '../types';
 import { supabase } from '../lib/supabase';
+import { useLanguage } from '../lib/LanguageContext';
 
 interface LabourListProps {
   onNavigate: (view: ViewState, ctx?: any) => void;
 }
 
 export function LabourList({ onNavigate }: Readonly<LabourListProps>) {
+  const { t } = useLanguage();
   const [labours, setLabours] = useState<Labour[]>([]);
   const [sites, setSites] = useState<Site[]>([]);
   const [searchTerm, setSearchTerm] = useState('');
@@ -159,7 +161,7 @@ export function LabourList({ onNavigate }: Readonly<LabourListProps>) {
     <div className="w-full pb-32 px-4 pt-4 max-w-4xl mx-auto space-y-4">
       {/* Header section */}
       <div className="bg-surface-bright rounded-lg shadow-sm border border-outline-variant p-4">
-        <h2 className="text-xl font-bold text-on-surface tracking-tight">Labours Directory</h2>
+        <h2 className="text-xl font-bold text-on-surface tracking-tight">{t('Labours')} Directory</h2>
         <p className="text-xs text-on-surface-variant font-medium mt-1">Manage profiles, track dues & view history</p>
 
         <div className="flex gap-2 mt-4 items-center">
@@ -181,13 +183,13 @@ export function LabourList({ onNavigate }: Readonly<LabourListProps>) {
             onClick={() => setShowArchived(false)}
             className={`px-4 py-2 text-sm font-bold border-b-2 transition-colors ${!showArchived ? 'border-primary text-primary' : 'border-transparent text-on-surface-variant hover:text-on-surface'}`}
           >
-            Active Labours
+            Active {t('Labours')}
           </button>
           <button
             onClick={() => setShowArchived(true)}
             className={`px-4 py-2 text-sm font-bold border-b-2 transition-colors ${showArchived ? 'border-primary text-primary' : 'border-transparent text-on-surface-variant hover:text-on-surface'}`}
           >
-            Archived
+            {t('Archive')}d
           </button>
         </div>
       </div>
@@ -228,7 +230,7 @@ export function LabourList({ onNavigate }: Readonly<LabourListProps>) {
                   <p className="text-xs font-semibold text-on-surface">{worker.mobile || 'N/A'}</p>
                </div>
                <div>
-                  <p className="text-[9px] text-on-surface-variant uppercase font-bold tracking-wider mb-0.5">Daily Rate</p>
+                  <p className="text-[9px] text-on-surface-variant uppercase font-bold tracking-wider mb-0.5">{t('Daily Rate')}</p>
                   <p className="text-xs font-semibold text-on-surface">₹{worker.daily_rate}/day</p>
                </div>
             </div>
@@ -288,7 +290,7 @@ export function LabourList({ onNavigate }: Readonly<LabourListProps>) {
         <div className="fixed inset-0 z-[100] flex items-end sm:items-center justify-center bg-black/50 p-0 sm:p-4 animate-in fade-in">
           <div className="bg-surface w-full sm:max-w-md rounded-t-2xl sm:rounded-2xl shadow-xl border border-outline-variant max-h-[90vh] overflow-y-auto animate-in slide-in-from-bottom flex flex-col">
             <div className="flex justify-between items-center p-4 border-b border-outline-variant sticky top-0 bg-surface z-10">
-              <h3 className="font-bold text-lg">{editingLabour ? 'Edit Labour' : 'Add Labour'}</h3>
+              <h3 className="font-bold text-lg">{editingLabour ? 'Edit Labour' : t('Add Labour')}</h3>
               <button onClick={() => setShowModal(false)} className="p-1 hover:bg-surface-container rounded-full"><X className="w-5 h-5"/></button>
             </div>
             <div className="p-4 space-y-4 flex-grow">
@@ -312,7 +314,7 @@ export function LabourList({ onNavigate }: Readonly<LabourListProps>) {
               </div>
               <div className="grid grid-cols-2 gap-4">
                 <div>
-                  <label className="text-xs font-bold text-on-surface-variant mb-1 block">Daily Rate (₹)</label>
+                  <label className="text-xs font-bold text-on-surface-variant mb-1 block">{t('Daily Rate')} (₹)</label>
                   <input type="number" className="w-full bg-surface-container-low border border-outline-variant p-2 rounded-md text-sm outline-none focus:border-primary" value={formData.daily_rate} onChange={e => setFormData({...formData, daily_rate: parseFloat(e.target.value) || 0})} />
                 </div>
                 <div>
@@ -333,7 +335,7 @@ export function LabourList({ onNavigate }: Readonly<LabourListProps>) {
             </div>
             <div className="p-4 border-t border-outline-variant bg-surface-container-low sticky bottom-0">
               <button onClick={saveLabour} className="w-full bg-primary text-white font-bold py-2.5 rounded-lg active:scale-95 transition-transform" disabled={!formData.name}>
-                {editingLabour ? 'Save Changes' : 'Create Record'}
+                {editingLabour ? t('Save') : t('Add Labour')}
               </button>
             </div>
           </div>
@@ -345,9 +347,9 @@ export function LabourList({ onNavigate }: Readonly<LabourListProps>) {
         <div className="fixed inset-0 bg-black/60 z-[100] flex items-center justify-center p-4">
           <div className="bg-surface-bright rounded-lg p-6 max-w-sm w-full shadow-lg border border-outline-variant animate-in zoom-in-95 duration-200">
             <h3 className="text-lg font-bold text-on-surface mb-2">
-              {activeModal.type === 'archive' ? 'Archive Labour' : 
+              {activeModal.type === 'archive' ? `${t('Archive')} Labour` : 
                activeModal.type === 'unarchive' ? 'Restore Labour' :
-               'Delete Labour'}
+               `${t('Delete')} Labour`}
             </h3>
             <p className="text-sm text-on-surface-variant mb-6">
               {activeModal.type === 'archive' 
@@ -362,7 +364,7 @@ export function LabourList({ onNavigate }: Readonly<LabourListProps>) {
                 onClick={() => setActiveModal(null)}
                 className="px-4 py-2 text-sm font-bold text-on-surface-variant bg-surface-container hover:bg-surface-container-high rounded-md transition-colors"
               >
-                Cancel
+                {t('Cancel')}
               </button>
               <button 
                 onClick={executeAction}
@@ -372,9 +374,9 @@ export function LabourList({ onNavigate }: Readonly<LabourListProps>) {
                   'bg-error hover:bg-error/90'
                 }`}
               >
-                {activeModal.type === 'archive' ? 'Archive' : 
+                {activeModal.type === 'archive' ? t('Archive') : 
                  activeModal.type === 'unarchive' ? 'Restore' :
-                 'Delete'}
+                 t('Delete')}
               </button>
             </div>
           </div>

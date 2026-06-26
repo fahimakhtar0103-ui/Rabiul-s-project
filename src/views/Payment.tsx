@@ -1,6 +1,7 @@
 import { useState } from 'react';
 import { Banknote, QrCode, Landmark, Delete, Loader2 } from 'lucide-react';
 import { supabase } from '../lib/supabase';
+import { useLanguage } from '../lib/LanguageContext';
 
 interface PaymentProps {
   onSuccess: () => void;
@@ -8,6 +9,7 @@ interface PaymentProps {
 }
 
 export function Payment({ onSuccess, worker }: Readonly<PaymentProps>) {
+  const { t } = useLanguage();
   const [amount, setAmount] = useState<string>('0');
   const [mode, setMode] = useState<'Cash' | 'UPI' | 'Bank'>('Cash');
   const [entryType, setEntryType] = useState<'Advance' | 'Payment'>('Advance');
@@ -104,7 +106,7 @@ export function Payment({ onSuccess, worker }: Readonly<PaymentProps>) {
              entryType === 'Payment' ? 'bg-surface-bright text-primary shadow-sm border border-outline-variant/50' : 'text-on-surface-variant hover:bg-surface-container'
            }`}
         >
-          Regular Payment
+          Regular {t('Payment')}
         </button>
       </div>
 
@@ -176,6 +178,7 @@ export function Payment({ onSuccess, worker }: Readonly<PaymentProps>) {
       <div className="grid grid-cols-3 gap-2 mb-4">
         {(['Cash', 'UPI', 'Bank'] as const).map(m => {
           const isSelected = mode === m;
+          const displayMode = m === 'Bank' ? 'Bank Transfer' : m;
           return (
             <button 
               key={m}
@@ -189,7 +192,7 @@ export function Payment({ onSuccess, worker }: Readonly<PaymentProps>) {
               {m === 'Cash' && <Banknote className="w-4 h-4" />}
               {m === 'UPI' && <QrCode className="w-4 h-4" />}
               {m === 'Bank' && <Landmark className="w-4 h-4" />}
-              <span className="text-xs uppercase tracking-wide">{m}</span>
+              <span className="text-xs uppercase tracking-wide">{t(displayMode)}</span>
             </button>
           )
         })}
@@ -221,7 +224,7 @@ export function Payment({ onSuccess, worker }: Readonly<PaymentProps>) {
              onClick={() => onSuccess()}
              className="px-6 py-4 bg-surface-container-low text-on-surface-variant text-sm font-bold uppercase tracking-widest rounded-md shadow-sm active:scale-[0.99] transition-transform border border-outline-variant/50"
           >
-            Cancel
+            {t('Cancel')}
           </button>
           <button 
             onClick={handleConfirm}

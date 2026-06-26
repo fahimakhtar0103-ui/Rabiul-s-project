@@ -4,8 +4,10 @@ import { supabase } from '../lib/supabase';
 import jsPDF from 'jspdf';
 import autoTable from 'jspdf-autotable';
 import * as XLSX from 'xlsx';
+import { useLanguage } from '../lib/LanguageContext';
 
 export function Reports() {
+  const { t } = useLanguage();
   const today = new Date();
   const [selectedMonth, setSelectedMonth] = useState(today.toISOString().slice(0, 7)); // YYYY-MM
   const [data, setData] = useState<any>(null);
@@ -503,7 +505,7 @@ export function Reports() {
         {/* Header section */}
         <div className="bg-surface-bright rounded-lg shadow-sm border border-outline-variant p-4 flex flex-col md:flex-row justify-between items-start md:items-center gap-4">
           <div>
-            <h2 className="text-xl font-bold text-on-surface tracking-tight">Reports & Ledgers</h2>
+            <h2 className="text-xl font-bold text-on-surface tracking-tight">{t('Reports')} & Ledgers</h2>
             <p className="text-xs text-on-surface-variant font-medium mt-1">
               Financial, Operational & Ledger Exports
             </p>
@@ -544,7 +546,7 @@ export function Reports() {
                             <FileSpreadsheet className="w-5 h-5"/>
                         </div>
                         <div>
-                            <h3 className="text-base font-bold text-on-surface tracking-tight">Monthly Payroll Report</h3>
+                            <h3 className="text-base font-bold text-on-surface tracking-tight">{t('Monthly Payroll')} Report</h3>
                             <p className="text-xs text-on-surface-variant mt-1 leading-snug">
                                 Complete aggregate of operations, salary generation, and deductions for {selectedMonth}.
                             </p>
@@ -557,7 +559,7 @@ export function Reports() {
                             className="bg-primary hover:bg-primary/90 text-white rounded-lg py-2.5 flex items-center justify-center gap-2 text-xs font-bold transition-all disabled:opacity-50"
                         >
                             {exporting['payroll-pdf'] ? <Loader2 className="w-4 h-4 animate-spin"/> : <FileText className="w-4 h-4"/> }
-                            Export PDF
+                            {t('Export PDF')}
                         </button>
                         <button 
                             disabled={exporting['payroll-excel']}
@@ -565,7 +567,7 @@ export function Reports() {
                             className="bg-[#107C41] hover:bg-[#107C41]/90 text-white rounded-lg py-2.5 flex items-center justify-center gap-2 text-xs font-bold transition-all disabled:opacity-50"
                         >
                             {exporting['payroll-excel'] ? <Loader2 className="w-4 h-4 animate-spin"/> : <FileSpreadsheet className="w-4 h-4"/> }
-                            Export Excel
+                            {t('Export Excel')}
                         </button>
                     </div>
                 </div>
@@ -590,7 +592,7 @@ export function Reports() {
                              className="bg-primary hover:bg-primary/90 text-white rounded-lg py-2.5 flex items-center justify-center gap-2 text-xs font-bold transition-all disabled:opacity-50"
                         >
                            {exporting['history-pdf'] ? <Loader2 className="w-4 h-4 animate-spin"/> : <FileText className="w-4 h-4"/> }
-                           Export PDF
+                           {t('Export PDF')}
                         </button>
                         <button 
                              disabled={exporting['history-excel']}
@@ -598,7 +600,7 @@ export function Reports() {
                              className="bg-[#107C41] hover:bg-[#107C41]/90 text-white rounded-lg py-2.5 flex items-center justify-center gap-2 text-xs font-bold transition-all disabled:opacity-50"
                         >
                            {exporting['history-excel'] ? <Loader2 className="w-4 h-4 animate-spin"/> : <FileSpreadsheet className="w-4 h-4"/> }
-                           Export Excel
+                           {t('Export Excel')}
                         </button>
                     </div>
                 </div>
@@ -623,7 +625,7 @@ export function Reports() {
                              className="bg-primary hover:bg-primary/90 text-white rounded-lg py-2.5 flex items-center justify-center gap-2 text-xs font-bold transition-all disabled:opacity-50"
                         >
                            {exporting['site-pdf'] ? <Loader2 className="w-4 h-4 animate-spin"/> : <FileText className="w-4 h-4"/> }
-                           Export PDF
+                           {t('Export PDF')}
                         </button>
                         <button 
                              disabled={exporting['site-excel']}
@@ -631,7 +633,7 @@ export function Reports() {
                              className="bg-[#107C41] hover:bg-[#107C41]/90 text-white rounded-lg py-2.5 flex items-center justify-center gap-2 text-xs font-bold transition-all disabled:opacity-50"
                         >
                            {exporting['site-excel'] ? <Loader2 className="w-4 h-4 animate-spin"/> : <FileSpreadsheet className="w-4 h-4"/> }
-                           Export Excel
+                           {t('Export Excel')}
                         </button>
                     </div>
                 </div>
@@ -657,7 +659,7 @@ export function Reports() {
                              className="bg-error hover:bg-error/90 text-white rounded-lg py-2.5 flex items-center justify-center gap-2 text-xs font-bold transition-all disabled:opacity-50"
                         >
                            {exporting['out-pdf'] ? <Loader2 className="w-4 h-4 animate-spin"/> : <FileText className="w-4 h-4"/> }
-                           Export PDF
+                           {t('Export PDF')}
                         </button>
                         <button 
                              disabled={exporting['out-excel']}
@@ -665,7 +667,7 @@ export function Reports() {
                              className="bg-[#107C41] hover:bg-[#107C41]/90 text-white rounded-lg py-2.5 flex items-center justify-center gap-2 text-xs font-bold transition-all disabled:opacity-50"
                         >
                            {exporting['out-excel'] ? <Loader2 className="w-4 h-4 animate-spin"/> : <FileSpreadsheet className="w-4 h-4"/> }
-                           Export Excel
+                           {t('Export Excel')}
                         </button>
                     </div>
                 </div>
@@ -675,7 +677,7 @@ export function Reports() {
             <h3 className="text-sm font-bold text-on-surface uppercase tracking-wider mt-8 mb-4">Quick Insights</h3>
             <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
               <div className="bg-surface-bright border border-outline-variant rounded-lg p-4 shadow-sm">
-                <span className="text-[10px] font-bold text-on-surface-variant uppercase tracking-wide block mb-2">Total Labours</span>
+                <span className="text-[10px] font-bold text-on-surface-variant uppercase tracking-wide block mb-2">{t('Total Labour')}</span>
                 <h3 className="text-xl font-black text-on-surface">{data.totalLabours}</h3>
               </div>
               <div className="bg-surface-bright border border-outline-variant rounded-lg p-4 shadow-sm">
@@ -683,11 +685,11 @@ export function Reports() {
                 <h3 className="text-xl font-black text-on-surface">{data.activeLabours}</h3>
               </div>
               <div className="bg-success/5 border border-success/20 rounded-lg p-4 shadow-sm">
-                <span className="text-[10px] font-bold text-success uppercase tracking-wide block mb-2">Total Paid</span>
+                <span className="text-[10px] font-bold text-success uppercase tracking-wide block mb-2">{t('Total Payments')}</span>
                 <h3 className="text-xl font-black text-success">₹{(data.totalPayments || 0).toLocaleString()}</h3>
               </div>
                <div className="bg-error/5 border border-error/20 rounded-lg p-4 shadow-sm">
-                <span className="text-[10px] font-bold text-error uppercase tracking-wide block mb-2">Total Deductions</span>
+                <span className="text-[10px] font-bold text-error uppercase tracking-wide block mb-2">{t('Total Deductions')}</span>
                 <h3 className="text-xl font-black text-error">₹{(data.totalDeductions || 0).toLocaleString()}</h3>
               </div>
             </div>

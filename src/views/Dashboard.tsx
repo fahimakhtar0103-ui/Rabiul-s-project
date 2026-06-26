@@ -152,7 +152,7 @@ export function Dashboard() {
       {/* Top Section */}
       <div className="bg-surface-bright rounded-lg shadow-sm border border-outline-variant p-4 shrink-0 mt-4">
         <h2 className="text-xl font-bold text-on-surface mb-4 tracking-tight flex items-center justify-between">
-          <span>{new Date().toLocaleString('default', { month: 'long', year: 'numeric' })} Overview</span>
+          <span>{new Date().toLocaleString('default', { month: 'long', year: 'numeric' })} {t('Dashboard')}</span>
           <span className="text-[10px] font-bold text-on-surface-variant uppercase tracking-wider bg-surface-container px-2 py-0.5 rounded-full border border-outline-variant/50">Active Period</span>
         </h2>
         <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
@@ -181,8 +181,8 @@ export function Dashboard() {
           <section className="bg-surface-bright rounded-lg shadow-sm border border-outline-variant flex flex-col min-h-[50%] max-h-[50%] shrink-0">
             <div className="p-4 border-b border-outline-variant/50 flex-shrink-0">
               <h3 className="text-sm font-bold text-on-surface flex items-center justify-between">
-                <span>Site Summary</span>
-                <span className="text-[10px] bg-surface-container px-2 py-0.5 rounded text-on-surface-variant uppercase tracking-wider">{data.sitesSummary.length} Sites</span>
+                <span>{t('Sites')} Summary</span>
+                <span className="text-[10px] bg-surface-container px-2 py-0.5 rounded text-on-surface-variant uppercase tracking-wider">{data.sitesSummary.length} {t('Sites')}</span>
               </h3>
             </div>
             <div className="overflow-y-auto">
@@ -191,8 +191,8 @@ export function Dashboard() {
                  <table className="w-full text-left border-collapse sm:min-w-[500px]">
                     <thead className="bg-surface-container-low/50 border-b border-outline-variant text-[10px] uppercase sticky top-0 z-10">
                       <tr>
-                        <th className="p-3 font-semibold text-on-surface-variant border-r border-outline-variant/30">Site Name</th>
-                        <th className="p-3 font-semibold text-on-surface-variant text-center border-r border-outline-variant/30">{t('Labours')}</th>
+                        <th className="p-3 font-semibold text-on-surface-variant border-r border-outline-variant/30">{t('Site Name')}</th>
+                        <th className="p-3 font-semibold text-on-surface-variant text-center border-r border-outline-variant/30">{t('Total Labour')}</th>
                         <th className="p-3 font-semibold text-on-surface-variant text-right border-r border-outline-variant/30">{t('Payroll')}</th>
                         <th className="p-3 font-semibold text-on-surface-variant text-right">{t('Pending Due')}</th>
                       </tr>

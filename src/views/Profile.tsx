@@ -24,7 +24,7 @@ export function Profile({ worker, onNavigate }: Readonly<ProfileProps>) {
   // Forms state
   const [attendanceForm, setAttendanceForm] = useState({ id: null as string | null, attendance_days: '' });
   const [paymentForm, setPaymentForm] = useState({ id: null as string | null, date: today.toISOString().slice(0, 10), amount: '', mode: 'Cash', notes: '' });
-  const [deductionForm, setDeductionForm] = useState({ id: null as string | null, month: selectedMonthStr, year: selectedYearStr, ration_amount: '', pocket_money_amount: '', other_deduction_amount: '', notes: '' });
+  const [deductionForm, setDeductionForm] = useState({ id: null as string | null, month: today.toISOString().slice(5, 7), year: today.toISOString().slice(0, 4), ration_amount: '', pocket_money_amount: '', other_deduction_amount: '', notes: '' });
 
   useEffect(() => {
     if (worker?.id) fetchProfile();
@@ -359,23 +359,23 @@ export function Profile({ worker, onNavigate }: Readonly<ProfileProps>) {
           
           <div className="p-4 grid grid-cols-2 md:grid-cols-4 gap-4 print:grid-cols-4">
              <div className="bg-surface-container-low/50 rounded-md p-3 border border-outline-variant/30 print:border-gray-300">
-              <span className="text-[10px] font-bold text-on-surface-variant uppercase tracking-wider block mb-1">Previous Due</span>
+              <span className="text-[10px] font-bold text-on-surface-variant uppercase tracking-wider block mb-1">{t('Previous Due')}</span>
               <h2 className="text-xl font-bold text-on-surface mt-0.5">₹{previousDue.toLocaleString()}</h2>
             </div>
              <div className="bg-surface-container-low/50 rounded-md p-3 border border-outline-variant/30 print:border-gray-300">
-              <span className="text-[10px] font-bold text-on-surface-variant uppercase tracking-wider block mb-1">Days Present</span>
+              <span className="text-[10px] font-bold text-on-surface-variant uppercase tracking-wider block mb-1">{t('Attendance Days')}</span>
               <h2 className="text-xl font-bold text-on-surface mt-0.5">{currentDays} <span className="text-xs text-on-surface-variant">days</span></h2>
             </div>
              <div className="bg-surface-container-low/50 rounded-md p-3 border border-outline-variant/30 print:border-gray-300">
-              <span className="text-[10px] font-bold text-on-surface-variant uppercase tracking-wider block mb-1">Gross Salary (This M)</span>
+              <span className="text-[10px] font-bold text-on-surface-variant uppercase tracking-wider block mb-1">{t('Gross Salary')}</span>
               <h2 className="text-xl font-bold text-primary mt-0.5">₹{grossSalaryThisMonth.toLocaleString()}</h2>
             </div>
              <div className="bg-error/5 rounded-md p-3 border border-error/20 print:border-gray-300">
-              <span className="text-[10px] font-bold text-error uppercase tracking-wider block mb-1">Deductions (This M)</span>
+              <span className="text-[10px] font-bold text-error uppercase tracking-wider block mb-1">{t('Total Deductions')}</span>
               <h2 className="text-xl font-bold text-error mt-0.5">₹{totalDeductedThisMonth.toLocaleString()}</h2>
             </div>
              <div className="bg-success/5 rounded-md p-3 border border-success/20 print:border-gray-300">
-              <span className="text-[10px] font-bold text-success uppercase tracking-wider block mb-1">Paid (This M)</span>
+              <span className="text-[10px] font-bold text-success uppercase tracking-wider block mb-1">{t('Total Payments')}</span>
               <h2 className="text-xl font-bold text-success mt-0.5">₹{totalPaidThisMonth.toLocaleString()}</h2>
             </div>
 
@@ -508,15 +508,15 @@ export function Profile({ worker, onNavigate }: Readonly<ProfileProps>) {
                  <input type="month" className="w-full border border-outline-variant rounded p-2 text-sm bg-surface-container-low font-bold cursor-not-allowed text-on-surface-variant" value={selectedMonth} disabled/>
                </div>
                <div>
-                 <label className="text-xs font-bold mb-1 block text-on-surface-variant">Ration (₹)</label>
+                 <label className="text-xs font-bold mb-1 block text-on-surface-variant">{t('Ration')} (₹)</label>
                  <input type="number" className="w-full border border-outline-variant rounded p-2 text-sm bg-surface-container-low focus:border-primary outline-none" value={deductionForm.ration_amount} onChange={e => setDeductionForm({...deductionForm, ration_amount: e.target.value})}/>
                </div>
                <div>
-                 <label className="text-xs font-bold mb-1 block text-on-surface-variant">Pocket Money (₹)</label>
+                 <label className="text-xs font-bold mb-1 block text-on-surface-variant">{t('Pocket Money')} (₹)</label>
                  <input type="number" className="w-full border border-outline-variant rounded p-2 text-sm bg-surface-container-low focus:border-primary outline-none" value={deductionForm.pocket_money_amount} onChange={e => setDeductionForm({...deductionForm, pocket_money_amount: e.target.value})}/>
                </div>
                <div>
-                 <label className="text-xs font-bold mb-1 block text-on-surface-variant">Other (₹)</label>
+                 <label className="text-xs font-bold mb-1 block text-on-surface-variant">{t('Other Deduction')} (₹)</label>
                  <input type="number" className="w-full border border-outline-variant rounded p-2 text-sm bg-surface-container-low focus:border-primary outline-none" value={deductionForm.other_deduction_amount} onChange={e => setDeductionForm({...deductionForm, other_deduction_amount: e.target.value})}/>
                </div>
                <div className="lg:col-span-4">
