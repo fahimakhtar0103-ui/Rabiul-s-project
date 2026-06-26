@@ -37,7 +37,7 @@ export function Profile({ worker, onNavigate }: Readonly<ProfileProps>) {
 
   const fetchProfile = async () => {
     try {
-      const labourRes = await supabase.from('labour').select('*, site(*)').eq('id', worker.id).single();
+      const labourRes = await supabase.from('labour').select('*, site!site_id(*)').eq('id', worker.id).single();
       const attendanceRes = await supabase.from('attendance').select('*').eq('labour_id', worker.id).order('year', { ascending: false }).order('month', { ascending: false });
       const paymentRes = await supabase.from('payment').select('*').eq('labour_id', worker.id).order('payment_date', { ascending: false });
       const deductionRes = await supabase.from('deduction').select('*').eq('labour_id', worker.id).order('payment_date', { ascending: false });

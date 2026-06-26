@@ -33,7 +33,7 @@ export function Dashboard() {
       const currentYear = today.getFullYear();
       const currentMonthInt = today.getMonth() + 1;
       
-      const { data: labours } = await supabase.from('labour').select('*, site(name)').eq('is_archived', false);
+      const { data: labours } = await supabase.from('labour').select('*, site!site_id(name)').eq('is_archived', false);
       const { data: sites } = await supabase.from('site').select('*');
       
       // 2. Fetch payments, deductions, attendance for calculating dues

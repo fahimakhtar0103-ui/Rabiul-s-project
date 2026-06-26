@@ -34,7 +34,7 @@ export function LabourList({ onNavigate }: Readonly<LabourListProps>) {
     try {
       const { data, error } = await supabase
         .from('labour')
-        .select('*, site(*)')
+        .select('*, site!site_id(*)')
         .eq('is_archived', showArchived)
         .order('id', { ascending: false });
         

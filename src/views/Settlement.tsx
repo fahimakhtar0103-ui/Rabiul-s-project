@@ -25,7 +25,7 @@ export function Settlement() {
     setSaveStatus({ saving: false, message: '', type: null });
     
     try {
-      const laboursRes = await supabase.from('labour').select('*, site(*)').eq('is_archived', false).order('id', { ascending: false });
+      const laboursRes = await supabase.from('labour').select('*, site!site_id(*)').eq('is_archived', false).order('id', { ascending: false });
       if (laboursRes.error) {
         console.error("Labour fetch error:", laboursRes.error);
         setSaveStatus({ saving: false, message: "Error fetching labours: " + laboursRes.error.message, type: 'error' });
