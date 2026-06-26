@@ -13,6 +13,7 @@ export function Settlement() {
   const [selectedMonth, setSelectedMonth] = useState(today.toISOString().slice(0, 7)); // YYYY-MM
   const [loading, setLoading] = useState(false);
   const [dbError, setDbError] = useState(false);
+  const [fetchError, setFetchError] = useState<string | null>(null);
   const [saveStatus, setSaveStatus] = useState<{saving: boolean, message: string, type: 'success' | 'error' | null}>({ saving: false, message: '', type: null });
 
   useEffect(() => {
@@ -22,6 +23,7 @@ export function Settlement() {
   const fetchSettlement = async () => {
     setLoading(true);
     setDbError(false);
+    setFetchError(null);
     setSaveStatus({ saving: false, message: '', type: null });
     
     try {
@@ -38,19 +40,28 @@ export function Settlement() {
       const currentYear = parseInt(yearStr);
       const currentMonth = parseInt(monthStr);
 
-      const entriesRes = await supabase.from('monthly_settlement')
+      let entriesRes = await supabase.from('monthly_settlement')
         .select('*')
         .eq('year', currentYear)
         .eq('month', currentMonth);
       
       if (entriesRes.error) {
-        if (entriesRes.error.code === '42P01' || entriesRes.error.code === 'PGRST205') {
-          // Table doesn't exist
-          setDbError(true);
-          setLoading(false);
-          return;
+        // Try fallback to old schema (month as string, e.g. "2026-06", and no year column)
+        const fallbackRes = await supabase.from('monthly_settlement')
+          .select('*')
+          .eq('month', selectedMonth);
+        
+        if (!fallbackRes.error) {
+          entriesRes = fallbackRes;
+        } else {
+          if (entriesRes.error.code === '42P01' || entriesRes.error.code === 'PGRST205') {
+            // Table doesn't exist
+            setDbError(true);
+            setLoading(false);
+            return;
+          }
+          throw entriesRes.error;
         }
-        throw entriesRes.error;
       }
       
       const entries = entriesRes.data || [];
@@ -65,9 +76,9 @@ export function Settlement() {
           site: labour.site ? labour.site.name : 'Unassigned',
           daily_rate: entry.daily_rate !== undefined ? Number(entry.daily_rate) : Number(labour.daily_rate),
           attendance_days: entry.attendance_days || 0,
-          ration: entry.ration_amount || 0,
-          pocket_money: entry.pocket_money_amount || 0,
-          other_deduction: entry.other_deduction_amount || 0,
+          ration: entry.ration_amount !== undefined ? Number(entry.ration_amount || 0) : Number(entry.ration || 0),
+          pocket_money: entry.pocket_money_amount !== undefined ? Number(entry.pocket_money_amount || 0) : Number(entry.pocket_money || 0),
+          other_deduction: entry.other_deduction_amount !== undefined ? Number(entry.other_deduction_amount || 0) : Number(entry.other_deduction || 0),
           total_payments: entry.total_payments || 0,
           _entryId: entry.id || null
         };
@@ -76,6 +87,7 @@ export function Settlement() {
       setWorkers(settlementData);
     } catch (err: any) {
       console.error(err);
+      setFetchError(err.message || 'An unexpected error occurred while loading data.');
     } finally {
       setLoading(false);
     }
@@ -129,7 +141,8 @@ export function Settlement() {
         const netSalary = grossSalary - totalDeductions;
         
         const [yearStr, monthStr] = selectedMonth.split('-');
-        const payload = {
+        
+        const newPayload = {
           labour_id: w.id,
           month: parseInt(monthStr),
           year: parseInt(yearStr),
@@ -144,22 +157,44 @@ export function Settlement() {
           total_payments: w.total_payments
         };
 
+        const oldPayload = {
+          labour_id: w.id,
+          month: selectedMonth, // e.g. "2026-06"
+          attendance_days: w.attendance_days,
+          daily_rate: w.daily_rate,
+          ration: w.ration,
+          pocket_money: w.pocket_money,
+          other_deduction: w.other_deduction,
+          gross_salary: grossSalary,
+          total_deductions: totalDeductions,
+          net_salary: netSalary,
+          total_payments: w.total_payments
+        };
+
         if (w._entryId) {
-          await supabase.from('monthly_settlement').update(payload).eq('id', w._entryId);
+          const { error: updateErr } = await supabase.from('monthly_settlement').update(newPayload).eq('id', w._entryId);
+          if (updateErr) {
+            // Fallback
+            await supabase.from('monthly_settlement').update(oldPayload).eq('id', w._entryId);
+          }
         } else {
-          // If all default 0, skip insert to save space unless explicitly populated? 
-          // We can just insert it
-          const { data } = await supabase.from('monthly_settlement').insert([payload]).select().single();
-          if (data) w._entryId = data.id;
+          const { data, error: insertErr } = await supabase.from('monthly_settlement').insert([newPayload]).select().single();
+          if (insertErr) {
+            // Fallback
+            const { data: oldData } = await supabase.from('monthly_settlement').insert([oldPayload]).select().single();
+            if (oldData) w._entryId = oldData.id;
+          } else if (data) {
+            w._entryId = data.id;
+          }
         }
       }
 
       setSaveStatus({ saving: false, message: 'Settlement saved successfully.', type: 'success' });
       // Clear success message after 3 seconds
       setTimeout(() => setSaveStatus({ saving: false, message: '', type: null }), 3000);
-    } catch (err) {
+    } catch (err: any) {
       console.error(err);
-      setSaveStatus({ saving: false, message: 'Database error while saving.', type: 'error' });
+      setSaveStatus({ saving: false, message: 'Database error: ' + (err.message || 'Error occurred while saving'), type: 'error' });
     }
   };
 
@@ -193,6 +228,16 @@ export function Settlement() {
           <button onClick={fetchSettlement} className="mt-3 bg-error text-white px-4 py-1.5 rounded text-xs font-bold hover:bg-error/90">
             I have created the table. Retry.
           </button>
+        </div>
+      )}
+
+      {fetchError && (
+        <div className="bg-error/10 border border-error/50 rounded-lg p-4 text-sm text-error mb-4 flex items-start gap-2">
+          <AlertTriangle className="w-5 h-5 shrink-0 mt-0.5" />
+          <div>
+            <p className="font-bold">Error loading settlement data</p>
+            <p className="text-xs mt-1">{fetchError}</p>
+          </div>
         </div>
       )}
 
