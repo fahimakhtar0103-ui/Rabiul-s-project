@@ -66,7 +66,7 @@ export function Dashboard() {
         const monthlyPaid = labEntries.reduce((sum, m) => sum + Number(m.total_payments || 0), 0);
         
         // Total deductions
-        const manualDed = labDed.reduce((sum, d) => sum + Number(d.amount), 0);
+        const manualDed = labDed.reduce((sum, d) => sum + Number(d.ration_amount || 0) + Number(d.pocket_money_amount || 0) + Number(d.other_deduction_amount || 0), 0);
         const monthlyDed = labEntries.reduce((sum, m) => sum + Number(m.total_deductions || 0), 0);
         
         const totalGross = manualGross + monthlyGross;
@@ -112,22 +112,29 @@ export function Dashboard() {
       }, 0);
       const attPercent = totalPossibleDays > 0 ? Math.round((totalActualDays / totalPossibleDays) * 100) : 0;
 
+      // Construct a map of labour names for friendly names in feed
+      const labourMap = new Map((labours || []).map(l => [l.id, l.name]));
+
       // Construct a feed from latest payments and deductions
       const allActivities = [
         ...(payments || []).map(p => ({
           id: `p-${p.id}`,
-          title: `Payment to Labour #${p.labour_id}`,
+          title: `Payment to ${labourMap.get(p.labour_id) || `Labour #${p.labour_id}`}`,
           description: `₹${p.amount} paid via ${p.mode} (${p.notes || ''})`,
           date: p.payment_date,
           time: new Date(p.created_at || new Date()).toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'})
         })),
-        ...(deductions || []).map(d => ({
-          id: `d-${d.id}`,
-          title: `Deduction for Labour #${d.labour_id}`,
-          description: `₹${d.amount} deducted for ${d.notes}`,
-          date: d.payment_date,
-          time: new Date(d.created_at || new Date()).toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'})
-        }))
+        ...(deductions || []).map(d => {
+          const dAmount = Number(d.ration_amount || 0) + Number(d.pocket_money_amount || 0) + Number(d.other_deduction_amount || 0);
+          const dDate = d.created_at ? d.created_at.split('T')[0] : `${d.year}-${d.month.toString().padStart(2, '0')}-01`;
+          return {
+            id: `d-${d.id}`,
+            title: `Deduction for ${labourMap.get(d.labour_id) || `Labour #${d.labour_id}`}`,
+            description: `₹${dAmount} deducted for ${d.notes || 'Monthly Deductions'}`,
+            date: dDate,
+            time: d.created_at ? new Date(d.created_at).toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'}) : '12:00 PM'
+          };
+        })
       ].sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime()).slice(0, 15);
 
       setData({

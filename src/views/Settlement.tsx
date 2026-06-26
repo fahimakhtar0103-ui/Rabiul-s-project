@@ -28,7 +28,7 @@ export function Settlement() {
       const laboursRes = await supabase.from('labour').select('*, site(*)').eq('is_archived', false).order('id', { ascending: false });
       if (laboursRes.error) {
         console.error("Labour fetch error:", laboursRes.error);
-        alert("Error fetching labours: " + laboursRes.error.message);
+        setSaveStatus({ saving: false, message: "Error fetching labours: " + laboursRes.error.message, type: 'error' });
         throw laboursRes.error;
       }
       
@@ -64,7 +64,7 @@ export function Settlement() {
           displayId: labour.id_number || 'NO ID',
           site: labour.site ? labour.site.name : 'Unassigned',
           daily_rate: entry.daily_rate !== undefined ? Number(entry.daily_rate) : Number(labour.daily_rate),
-          attendance_attendance_days: entry.attendance_days || 0,
+          attendance_days: entry.attendance_days || 0,
           ration: entry.ration || 0,
           pocket_money: entry.pocket_money || 0,
           other_deduction: entry.other_deduction || 0,
@@ -133,7 +133,7 @@ export function Settlement() {
           labour_id: w.id,
           month: parseInt(monthStr),
           year: parseInt(yearStr),
-          attendance_attendance_days: w.attendance_days,
+          attendance_days: w.attendance_days,
           daily_rate: w.daily_rate,
           ration: w.ration,
           pocket_money: w.pocket_money,

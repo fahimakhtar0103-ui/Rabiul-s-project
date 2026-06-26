@@ -1,6 +1,6 @@
 {
-  "name": "",
-  "description": "",
+  "name": "Labour Payroll & Settlement System",
+  "description": "A system to manage contract labour, tracking daily wages, attendance, ration/pocket money deductions, payments, and generating monthly reports in English and Hindi.",
   "requestFramePermissions": [],
   "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
 }

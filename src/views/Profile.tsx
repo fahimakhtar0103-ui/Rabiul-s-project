@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { Download, IndianRupee, FileText, Calendar, Plus, Save, Phone, Home, FileSpreadsheet, Edit } from 'lucide-react';
+import { Download, IndianRupee, FileText, Calendar, Plus, Save, Phone, Home, FileSpreadsheet, Edit, AlertCircle } from 'lucide-react';
 import { LabourProfileData } from '../types';
 import { supabase } from '../lib/supabase';
 import jsPDF from 'jspdf';
@@ -16,6 +16,7 @@ export function Profile({ worker, onNavigate }: Readonly<ProfileProps>) {
   const { t } = useLanguage();
   const [data, setData] = useState<LabourProfileData | null>(null);
   const [activeTab, setActiveTab] = useState<'overview' | 'attendance' | 'payments' | 'deductions' | 'history'>('overview');
+  const [feedback, setFeedback] = useState<{message: string, type: 'success' | 'error' | null}>({ message: '', type: null });
   
   // Date tracking for active month filtering
   const today = new Date();
@@ -25,6 +26,10 @@ export function Profile({ worker, onNavigate }: Readonly<ProfileProps>) {
   const [attendanceForm, setAttendanceForm] = useState({ id: null as string | null, attendance_days: '' });
   const [paymentForm, setPaymentForm] = useState({ id: null as string | null, date: today.toISOString().slice(0, 10), amount: '', mode: 'Cash', notes: '' });
   const [deductionForm, setDeductionForm] = useState({ id: null as string | null, month: today.toISOString().slice(5, 7), year: today.toISOString().slice(0, 4), ration_amount: '', pocket_money_amount: '', other_deduction_amount: '', notes: '' });
+
+  useEffect(() => {
+    setFeedback({ message: '', type: null });
+  }, [activeTab]);
 
   useEffect(() => {
     if (worker?.id) fetchProfile();
@@ -161,6 +166,7 @@ export function Profile({ worker, onNavigate }: Readonly<ProfileProps>) {
   // Handlers
   const submitAttendance = async (e: React.FormEvent) => {
     e.preventDefault();
+    setFeedback({ message: '', type: null });
     try {
       // Upsert: First check if it exists
       const existing = await supabase.from('attendance').select('id').eq('labour_id', labour.id).eq('year', parseInt(selectedYearStr)).eq('month', selectedMonthStr).single();
@@ -181,13 +187,20 @@ export function Profile({ worker, onNavigate }: Readonly<ProfileProps>) {
 
       if (!error) {
         setAttendanceForm({ id: null, attendance_days: '' });
+        setFeedback({ message: 'Attendance recorded successfully!', type: 'success' });
         fetchProfile();
-      } else { alert(error.message); }
-    } catch (err) { console.error(err); }
+      } else {
+        setFeedback({ message: error.message, type: 'error' });
+      }
+    } catch (err: any) {
+      console.error(err);
+      setFeedback({ message: err.message || 'An unexpected error occurred.', type: 'error' });
+    }
   };
 
   const submitPayment = async (e: React.FormEvent) => {
     e.preventDefault();
+    setFeedback({ message: '', type: null });
     try {
       const payload = {
         labour_id: labour.id,
@@ -203,13 +216,20 @@ export function Profile({ worker, onNavigate }: Readonly<ProfileProps>) {
       
       if (!error) {
         setPaymentForm({ id: null, date: today.toISOString().slice(0, 10), amount: '', mode: 'Cash', notes: '' });
+        setFeedback({ message: 'Payment recorded successfully!', type: 'success' });
         fetchProfile();
-      } else { alert(error.message); }
-    } catch (err) { console.error(err); }
+      } else {
+        setFeedback({ message: error.message, type: 'error' });
+      }
+    } catch (err: any) {
+      console.error(err);
+      setFeedback({ message: err.message || 'An unexpected error occurred.', type: 'error' });
+    }
   };
 
   const submitDeduction = async (e: React.FormEvent) => {
     e.preventDefault();
+    setFeedback({ message: '', type: null });
     try {
       // Upsert based on month and year
       const existing = await supabase.from('deduction').select('id').eq('labour_id', labour.id).eq('year', parseInt(selectedYearStr)).eq('month', parseInt(selectedMonthStr)).single();
@@ -235,9 +255,15 @@ export function Profile({ worker, onNavigate }: Readonly<ProfileProps>) {
       
       if (!error) {
         setDeductionForm({ id: null, month: selectedMonthStr, year: selectedYearStr, ration_amount: '', pocket_money_amount: '', other_deduction_amount: '', notes: '' });
+        setFeedback({ message: 'Deductions saved successfully!', type: 'success' });
         fetchProfile();
-      } else { alert(error.message); }
-    } catch (err) { console.error(err); }
+      } else {
+        setFeedback({ message: error.message, type: 'error' });
+      }
+    } catch (err: any) {
+      console.error(err);
+      setFeedback({ message: err.message || 'An unexpected error occurred.', type: 'error' });
+    }
   };
 
   const exportPDF = () => {
@@ -396,6 +422,12 @@ export function Profile({ worker, onNavigate }: Readonly<ProfileProps>) {
 
       {activeTab === 'attendance' && (
         <div className="space-y-4">
+          {feedback.message && (
+            <div className={`p-3 rounded-lg border flex items-start gap-2 text-xs font-semibold ${feedback.type === 'success' ? 'bg-success/10 border-success/20 text-success' : 'bg-error/10 border-error/20 text-error'}`}>
+              <AlertCircle className="w-4 h-4 shrink-0 mt-0.5" />
+              <p>{feedback.message}</p>
+            </div>
+          )}
           <form className="bg-surface-bright rounded-lg border border-outline-variant p-4 flex flex-col gap-3" onSubmit={submitAttendance}>
              <h3 className="text-sm font-bold border-b border-outline-variant pb-2">Record Manual Attendance</h3>
              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
@@ -435,6 +467,12 @@ export function Profile({ worker, onNavigate }: Readonly<ProfileProps>) {
       )}
       {activeTab === 'payments' && (
         <div className="space-y-4">
+          {feedback.message && (
+            <div className={`p-3 rounded-lg border flex items-start gap-2 text-xs font-semibold ${feedback.type === 'success' ? 'bg-success/10 border-success/20 text-success' : 'bg-error/10 border-error/20 text-error'}`}>
+              <AlertCircle className="w-4 h-4 shrink-0 mt-0.5" />
+              <p>{feedback.message}</p>
+            </div>
+          )}
           <form className="bg-surface-bright rounded-lg border border-outline-variant p-4 flex flex-col gap-3" onSubmit={submitPayment}>
              <h3 className="text-sm font-bold border-b border-outline-variant pb-2">Record Payment</h3>
              <div className="grid grid-cols-2 gap-4">
@@ -500,6 +538,12 @@ export function Profile({ worker, onNavigate }: Readonly<ProfileProps>) {
 
       {activeTab === 'deductions' && (
         <div className="space-y-4">
+          {feedback.message && (
+            <div className={`p-3 rounded-lg border flex items-start gap-2 text-xs font-semibold ${feedback.type === 'success' ? 'bg-success/10 border-success/20 text-success' : 'bg-error/10 border-error/20 text-error'}`}>
+              <AlertCircle className="w-4 h-4 shrink-0 mt-0.5" />
+              <p>{feedback.message}</p>
+            </div>
+          )}
           <form className="bg-surface-bright rounded-lg border border-outline-variant p-4 flex flex-col gap-3" onSubmit={submitDeduction}>
              <h3 className="text-sm font-bold border-b border-outline-variant pb-2">Record Deduction</h3>
              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">

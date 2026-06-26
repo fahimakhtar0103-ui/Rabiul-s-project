@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { Banknote, QrCode, Landmark, Delete, Loader2 } from 'lucide-react';
+import { Banknote, QrCode, Landmark, Delete, Loader2, AlertCircle } from 'lucide-react';
 import { supabase } from '../lib/supabase';
 import { useLanguage } from '../lib/LanguageContext';
 
@@ -16,10 +16,12 @@ export function Payment({ onSuccess, worker }: Readonly<PaymentProps>) {
   const [date, setDate] = useState(new Date().toISOString().split('T')[0]);
   const [notes, setNotes] = useState('');
   const [loading, setLoading] = useState(false);
+  const [error, setError] = useState<string | null>(null);
 
   const updateDisplay = () => amount === "" ? "0" : amount;
 
   const pressKey = (key: string) => {
+    setError(null);
     if (key === 'back') {
       setAmount(prev => {
         const next = prev.slice(0, -1);
@@ -38,6 +40,7 @@ export function Payment({ onSuccess, worker }: Readonly<PaymentProps>) {
   };
 
   const addAmount = (val: number) => {
+    setError(null);
     setAmount(prev => {
       const num = parseFloat(prev) || 0;
       return (num + val).toString();
@@ -45,13 +48,14 @@ export function Payment({ onSuccess, worker }: Readonly<PaymentProps>) {
   };
 
   const handleConfirm = async () => {
+    setError(null);
     const num = parseFloat(amount);
     if (!num || num <= 0) {
-      alert("Please enter a valid amount.");
+      setError("Please enter a valid amount.");
       return;
     }
     if (!worker) {
-      alert("No worker selected.");
+      setError("No worker selected.");
       return;
     }
 
@@ -79,7 +83,7 @@ export function Payment({ onSuccess, worker }: Readonly<PaymentProps>) {
       onSuccess();
     } catch (err: any) {
       console.error(err);
-      alert(err.message || 'Error occurred');
+      setError(err.message || 'Error occurred');
     } finally {
       setLoading(false);
     }
@@ -123,6 +127,13 @@ export function Payment({ onSuccess, worker }: Readonly<PaymentProps>) {
         <p className="text-[10px] font-bold text-error uppercase tracking-wider">Previous Outstanding</p>
         <p className="text-xl font-extrabold text-error tracking-tight mt-0.5">₹{outstanding.toLocaleString('en-IN')}</p>
       </div>
+
+      {error && (
+        <div className="mb-4 p-3 bg-error/10 border border-error/20 text-error rounded-lg flex items-start gap-2 text-xs font-semibold animate-shake">
+          <AlertCircle className="w-4 h-4 shrink-0 mt-0.5" />
+          <p>{error}</p>
+        </div>
+      )}
 
       {/* Amount Display */}
       <div className="flex flex-col items-center py-6 bg-surface-container-low border border-outline-variant/50 rounded-lg mb-4 shadow-inner">

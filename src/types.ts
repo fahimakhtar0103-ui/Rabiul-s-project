@@ -19,7 +19,7 @@ export interface Attendance {
   labour_id: number;
   month: number;
   year: number;
-  attendance_attendance_days: number;
+  attendance_days: number;
   created_at?: string;
 }
 
@@ -50,7 +50,7 @@ export interface MonthlySettlement {
   labour_id: number;
   month: number;
   year: number;
-  attendance_attendance_days: number;
+  attendance_days: number;
   daily_rate: number;
   gross_salary: number;
   ration_amount: number;

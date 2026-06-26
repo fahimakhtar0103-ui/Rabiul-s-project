@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { Search, Filter, History, IndianRupee, UserPlus, X, Edit, Trash2, Archive, ArchiveRestore } from 'lucide-react';
+import { Search, Filter, History, IndianRupee, UserPlus, X, Edit, Trash2, Archive, ArchiveRestore, AlertCircle } from 'lucide-react';
 import { ViewState, Labour, Site } from '../types';
 import { supabase } from '../lib/supabase';
 import { useLanguage } from '../lib/LanguageContext';
@@ -23,6 +23,7 @@ export function LabourList({ onNavigate }: Readonly<LabourListProps>) {
   });
   
   const [activeModal, setActiveModal] = useState<{id: number, name: string, type: 'delete' | 'archive' | 'unarchive'} | null>(null);
+  const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
     fetchLabours();
@@ -60,6 +61,7 @@ export function LabourList({ onNavigate }: Readonly<LabourListProps>) {
   };
 
   const openForm = (labour?: Labour) => {
+    setError(null);
     if (labour) {
       setEditingLabour(labour);
       setFormData({
@@ -80,6 +82,7 @@ export function LabourList({ onNavigate }: Readonly<LabourListProps>) {
 
   const saveLabour = async () => {
     console.log("saveLabour initiated", { isEdit: !!editingLabour, formData });
+    setError(null);
     try {
       const isEdit = !!editingLabour;
       
@@ -110,7 +113,7 @@ export function LabourList({ onNavigate }: Readonly<LabourListProps>) {
         fetchLabours();
       } else {
         console.error("Save failed with error from API:", error.message);
-        alert(error.message);
+        setError(error.message);
       }
     } catch (err) {
       console.error("Network or parsing error in saveLabour:", err);
@@ -294,6 +297,12 @@ export function LabourList({ onNavigate }: Readonly<LabourListProps>) {
               <button onClick={() => setShowModal(false)} className="p-1 hover:bg-surface-container rounded-full"><X className="w-5 h-5"/></button>
             </div>
             <div className="p-4 space-y-4 flex-grow">
+              {error && (
+                <div className="p-3 bg-error/10 border border-error/20 text-error rounded-lg flex items-start gap-2 text-xs font-semibold animate-shake">
+                  <AlertCircle className="w-4 h-4 shrink-0 mt-0.5" />
+                  <p>{error}</p>
+                </div>
+              )}
               <div>
                 <label className="text-xs font-bold text-on-surface-variant mb-1 block">Full Name</label>
                 <input type="text" className="w-full bg-surface-container-low border border-outline-variant p-2 rounded-md text-sm outline-none focus:border-primary" value={formData.name} onChange={e => setFormData({...formData, name: e.target.value})} />

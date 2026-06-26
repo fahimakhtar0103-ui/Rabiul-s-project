@@ -57,7 +57,6 @@ export default function App() {
   const handlePaymentSuccess = () => {
     // Optionally update local state here if building full functionality.
     // Return to previous contextual view or labours list.
-    alert('Payment successful!');
     handleNavigate(selectedWorker ? 'profile' : 'labours', selectedWorker);
   };
 
