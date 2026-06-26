@@ -56,17 +56,18 @@ export function Payment({ onSuccess, worker }: Readonly<PaymentProps>) {
     setLoading(true);
     try {
       if (entryType === 'Advance') {
-        const { error } = await supabase.from('deduction').insert([{
-          labourId: worker.id,
-          point_date: date,
+        const { error } = await supabase.from('payment').insert([{
+          labour_id: worker.id,
+          payment_date: date,
           amount: num,
-          reason: notes || 'Advance'
+          mode: mode,
+          notes: notes ? `Advance - ${notes}` : 'Advance'
         }]);
         if (error) throw error;
       } else {
         const { error } = await supabase.from('payment').insert([{
-          labourId: worker.id,
-          point_date: date,
+          labour_id: worker.id,
+          payment_date: date,
           amount: num,
           mode,
           notes

@@ -24,6 +24,8 @@ export default function App() {
   useEffect(() => {
     supabase.auth.getSession().then(({ data: { session } }) => {
       setSession(session);
+    }).catch(err => {
+      console.error("Failed to get session:", err);
     });
 
     const {

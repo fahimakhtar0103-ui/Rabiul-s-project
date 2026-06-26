@@ -17,7 +17,7 @@ export function LabourList({ onNavigate }: Readonly<LabourListProps>) {
   const [showModal, setShowModal] = useState(false);
   const [editingLabour, setEditingLabour] = useState<Labour | null>(null);
   const [formData, setFormData] = useState({
-    name: '', fatherName: '', mobile: '', idNumber: '', siteId: '', dailyRate: 0, status: 'Active'
+    name: '', father_name: '', mobile: '', id_number: '', site_id: '', daily_rate: 0, status: 'Active'
   });
   
   const [activeModal, setActiveModal] = useState<{id: number, name: string, type: 'delete' | 'archive' | 'unarchive'} | null>(null);
@@ -39,7 +39,7 @@ export function LabourList({ onNavigate }: Readonly<LabourListProps>) {
       
       const formatted = (data || []).map((l: any) => ({
         ...l,
-        siteName: l.site ? l.site.name : null
+        site_name: l.site ? l.site.name : null
       }));
       setLabours(formatted);
     } catch (err) {
@@ -62,16 +62,16 @@ export function LabourList({ onNavigate }: Readonly<LabourListProps>) {
       setEditingLabour(labour);
       setFormData({
         name: labour.name,
-        fatherName: labour.fatherName || '',
+        father_name: labour.father_name || '',
         mobile: labour.mobile || '',
-        idNumber: labour.idNumber || '',
-        siteId: labour.siteId ? labour.siteId.toString() : '',
-        dailyRate: labour.dailyRate || 0,
+        id_number: labour.id_number || '',
+        site_id: labour.site_id ? labour.site_id.toString() : '',
+        daily_rate: labour.daily_rate || 0,
         status: labour.status || 'Active'
       });
     } else {
       setEditingLabour(null);
-      setFormData({ name: '', fatherName: '', mobile: '', idNumber: '', siteId: '', dailyRate: 0, status: 'Active' });
+      setFormData({ name: '', father_name: '', mobile: '', id_number: '', site_id: '', daily_rate: 0, status: 'Active' });
     }
     setShowModal(true);
   };
@@ -83,11 +83,11 @@ export function LabourList({ onNavigate }: Readonly<LabourListProps>) {
       
       const payload = {
         name: formData.name,
-        fatherName: formData.fatherName,
+        father_name: formData.father_name,
         mobile: formData.mobile,
-        idNumber: formData.idNumber,
-        siteId: formData.siteId ? parseInt(formData.siteId) : null,
-        dailyRate: formData.dailyRate,
+        id_number: formData.id_number,
+        site_id: formData.site_id ? parseInt(formData.site_id) : null,
+        daily_rate: formData.daily_rate,
         status: formData.status,
         role: 'Labour',
         is_archived: false
@@ -125,10 +125,10 @@ export function LabourList({ onNavigate }: Readonly<LabourListProps>) {
         const { error } = await supabase.from('labour').update({ is_archived: false }).eq('id', activeModal.id);
         if (!error) fetchLabours();
       } else if (activeModal.type === 'delete') {
-        await supabase.from('payment').delete().eq('labourId', activeModal.id);
-        await supabase.from('attendance').delete().eq('labourId', activeModal.id);
-        await supabase.from('deduction').delete().eq('labourId', activeModal.id);
-        await supabase.from('monthly_entries').delete().eq('labourId', activeModal.id);
+        await supabase.from('payment').delete().eq('labour_id', activeModal.id);
+        await supabase.from('attendance').delete().eq('labour_id', activeModal.id);
+        await supabase.from('deduction').delete().eq('labour_id', activeModal.id);
+        await supabase.from('monthly_settlement').delete().eq('labour_id', activeModal.id);
         const { error } = await supabase.from('labour').delete().eq('id', activeModal.id);
         if (!error) fetchLabours();
       }
@@ -152,7 +152,7 @@ export function LabourList({ onNavigate }: Readonly<LabourListProps>) {
 
   const filteredLabours = labours.filter(w => 
     w.name.toLowerCase().includes(searchTerm.toLowerCase()) || 
-    (w.idNumber && w.idNumber.toLowerCase().includes(searchTerm.toLowerCase()))
+    (w.id_number && w.id_number.toLowerCase().includes(searchTerm.toLowerCase()))
   );
 
   return (
@@ -209,9 +209,9 @@ export function LabourList({ onNavigate }: Readonly<LabourListProps>) {
                 <div>
                   <h4 className="text-base font-bold text-on-surface tracking-tight">{worker.name}</h4>
                   <div className="text-[10px] text-on-surface-variant font-semibold flex items-center gap-1.5 mt-0.5 uppercase tracking-wider">
-                     <span>{worker.idNumber || 'NO ID'}</span>
+                     <span>{worker.id_number || 'NO ID'}</span>
                      <span>•</span>
-                     <span>{worker.siteName || 'Unassigned'}</span>
+                     <span>{worker.site_name || 'Unassigned'}</span>
                   </div>
                 </div>
               </div>
@@ -229,7 +229,7 @@ export function LabourList({ onNavigate }: Readonly<LabourListProps>) {
                </div>
                <div>
                   <p className="text-[9px] text-on-surface-variant uppercase font-bold tracking-wider mb-0.5">Daily Rate</p>
-                  <p className="text-xs font-semibold text-on-surface">₹{worker.dailyRate}/day</p>
+                  <p className="text-xs font-semibold text-on-surface">₹{worker.daily_rate}/day</p>
                </div>
             </div>
 
@@ -298,7 +298,7 @@ export function LabourList({ onNavigate }: Readonly<LabourListProps>) {
               </div>
               <div>
                 <label className="text-xs font-bold text-on-surface-variant mb-1 block">Father's Name</label>
-                <input type="text" className="w-full bg-surface-container-low border border-outline-variant p-2 rounded-md text-sm outline-none focus:border-primary" value={formData.fatherName} onChange={e => setFormData({...formData, fatherName: e.target.value})} />
+                <input type="text" className="w-full bg-surface-container-low border border-outline-variant p-2 rounded-md text-sm outline-none focus:border-primary" value={formData.father_name} onChange={e => setFormData({...formData, father_name: e.target.value})} />
               </div>
               <div className="grid grid-cols-2 gap-4">
                 <div>
@@ -307,13 +307,13 @@ export function LabourList({ onNavigate }: Readonly<LabourListProps>) {
                 </div>
                 <div>
                   <label className="text-xs font-bold text-on-surface-variant mb-1 block">ID Number</label>
-                  <input type="text" className="w-full bg-surface-container-low border border-outline-variant p-2 rounded-md text-sm outline-none focus:border-primary" value={formData.idNumber} onChange={e => setFormData({...formData, idNumber: e.target.value})} />
+                  <input type="text" className="w-full bg-surface-container-low border border-outline-variant p-2 rounded-md text-sm outline-none focus:border-primary" value={formData.id_number} onChange={e => setFormData({...formData, id_number: e.target.value})} />
                 </div>
               </div>
               <div className="grid grid-cols-2 gap-4">
                 <div>
                   <label className="text-xs font-bold text-on-surface-variant mb-1 block">Daily Rate (₹)</label>
-                  <input type="number" className="w-full bg-surface-container-low border border-outline-variant p-2 rounded-md text-sm outline-none focus:border-primary" value={formData.dailyRate} onChange={e => setFormData({...formData, dailyRate: parseFloat(e.target.value) || 0})} />
+                  <input type="number" className="w-full bg-surface-container-low border border-outline-variant p-2 rounded-md text-sm outline-none focus:border-primary" value={formData.daily_rate} onChange={e => setFormData({...formData, daily_rate: parseFloat(e.target.value) || 0})} />
                 </div>
                 <div>
                   <label className="text-xs font-bold text-on-surface-variant mb-1 block">Status</label>
@@ -325,7 +325,7 @@ export function LabourList({ onNavigate }: Readonly<LabourListProps>) {
               </div>
               <div>
                 <label className="text-xs font-bold text-on-surface-variant mb-1 block">Assign Site</label>
-                <select className="w-full bg-surface-container-low border border-outline-variant p-2 rounded-md text-sm outline-none focus:border-primary" value={formData.siteId} onChange={e => setFormData({...formData, siteId: e.target.value})}>
+                <select className="w-full bg-surface-container-low border border-outline-variant p-2 rounded-md text-sm outline-none focus:border-primary" value={formData.site_id} onChange={e => setFormData({...formData, site_id: e.target.value})}>
                   <option value="">Unassigned</option>
                   {sites.map(s => <option key={s.id} value={s.id}>{s.name} ({s.location})</option>)}
                 </select>

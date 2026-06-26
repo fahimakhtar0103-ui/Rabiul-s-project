@@ -65,7 +65,7 @@ export function SiteManagement() {
     
     try {
       // First check if any labours are assigned to this site
-      const { data: labours, error: laboursError } = await supabase.from('labour').select('id').eq('siteId', deleteId).limit(1);
+      const { data: labours, error: laboursError } = await supabase.from('labour').select('id').eq('site_id', deleteId).limit(1);
       
       if (laboursError) throw laboursError;
       

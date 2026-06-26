@@ -3,12 +3,12 @@ export type ViewState = 'dashboard' | 'settlement' | 'labours' | 'payment' | 'pr
 export interface Labour {
   id: number;
   name: string;
-  fatherName: string | null;
+  father_name: string | null;
   mobile: string | null;
-  idNumber: string | null;
-  siteId: number | null;
-  siteName?: string;
-  dailyRate: number;
+  id_number: string | null;
+  site_id: number | null;
+  site_name?: string;
+  daily_rate: number;
   status: string;
   role: string | null;
   is_archived: boolean;
@@ -16,42 +16,51 @@ export interface Labour {
 
 export interface Attendance {
   id: number;
-  labourId: number;
-  month: string;
+  labour_id: number;
+  month: number;
   year: number;
-  days: number;
+  attendance_attendance_days: number;
+  created_at?: string;
 }
 
 export interface Payment {
   id: number;
-  labourId: number;
-  point_date: string;
+  labour_id: number;
+  payment_date: string;
   amount: number;
   mode: string | null;
   notes: string | null;
+  month: number;
+  year: number;
 }
 
 export interface Deduction {
   id: number;
-  labourId: number;
-  point_date: string;
-  amount: number;
-  reason: string | null;
+  labour_id: number;
+  month: number;
+  year: number;
+  ration_amount: number;
+  pocket_money_amount: number;
+  other_deduction_amount: number;
+  notes: string | null;
 }
 
-export interface MonthlyEntry {
+export interface MonthlySettlement {
   id: number;
-  labourId: number;
-  month: string;
-  attendance_days: number;
+  labour_id: number;
+  month: number;
+  year: number;
+  attendance_attendance_days: number;
   daily_rate: number;
-  ration: number;
-  pocket_money: number;
-  other_deduction: number;
   gross_salary: number;
+  ration_amount: number;
+  pocket_money_amount: number;
+  other_deduction_amount: number;
   total_deductions: number;
+  previous_due: number;
+  total_payments: number;
   net_salary: number;
-  payments_made: number;
+  net_payable: number;
 }
 
 export interface LabourProfileData {
@@ -59,7 +68,7 @@ export interface LabourProfileData {
   attendance: Attendance[];
   payments: Payment[];
   deductions: Deduction[];
-  monthlyEntries?: MonthlyEntry[];
+  monthly_settlement?: MonthlySettlement[];
 }
 
 export interface Worker extends Labour {}; // Aliasing for existing component props temporarily if needed
@@ -68,6 +77,7 @@ export interface Site {
   id: number;
   name: string;
   location: string | null;
+  status: string;
 }
 
 export interface Activity {
@@ -88,3 +98,4 @@ export interface Transaction {
   balance: number;
   balanceType: 'Dr' | 'Cr';
 }
+

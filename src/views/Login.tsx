@@ -40,7 +40,11 @@ export function Login() {
         setMessage('Check your email to verify your account.');
       }
     } catch (err: any) {
-      setError(err.message || 'An error occurred during authentication.');
+      if (err.message === 'Failed to fetch') {
+        setError('Failed to connect to the database. Please check your internet connection or verify that your Supabase credentials are set correctly.');
+      } else {
+        setError(err.message || 'An error occurred during authentication.');
+      }
     } finally {
       setLoading(false);
     }

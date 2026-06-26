@@ -31,14 +31,14 @@ export function Reports() {
       // Get basic stats
       const laboursRes = await supabase.from('labour').select('*, site(*)').eq('is_archived', false).order('id', { ascending: false });
       if (laboursRes.error) throw laboursRes.error;
-      const activeLaboursDataRes = await supabase.from('labour').select('id, siteId').eq('is_archived', false);
+      const activeLaboursDataRes = await supabase.from('labour').select('id, site_id').eq('is_archived', false);
       const attendanceRes = await supabase.from('attendance').select('*');
       const paymentRes = await supabase.from('payment').select('*');
       const deductionRes = await supabase.from('deduction').select('*');
       const sitesRes = await supabase.from('site').select('*');
       
-      let monthlyEntriesRes: any = { data: [] };
-      try { monthlyEntriesRes = await supabase.from('monthly_entries').select('*'); } catch(e) {}
+      let monthly_settlementRes: any = { data: [] };
+      try { monthly_settlementRes = await supabase.from('monthly_settlement').select('*'); } catch(e) {}
 
       const totalLabours = laboursRes.data?.length || 0;
       const labours = laboursRes.data || [];
@@ -46,21 +46,20 @@ export function Reports() {
       // Calculate table data
       const workers = labours.map((labour: any) => {
         // Current month
-        const currentAttendance = (attendanceRes.data || []).find(a => a.labourId === labour.id && a.year === year && a.month.toString().padStart(2, '0') === month);
-        const currentEntry = (monthlyEntriesRes.data || []).find((m: any) => m.labourId === labour.id && m.month === selectedMonth);
-        const currentDays = (currentAttendance ? Number(currentAttendance.days) : 0) + (currentEntry ? Number(currentEntry.attendance_days || 0) : 0);
+        const currentAttendance = (attendanceRes.data || []).find(a => a.labour_id === labour.id && a.year === year && a.month.toString().padStart(2, '0') === month);
+        const currentEntry = (monthly_settlementRes.data || []).find((m: any) => m.labour_id === labour.id && m.year === year && m.month === parseInt(month));
+        const currentDays = (currentAttendance ? Number(currentAttendance.attendance_days) : 0) + (currentEntry ? Number(currentEntry.attendance_days || 0) : 0);
         
-        const currentPayments = (paymentRes.data || []).filter(p => p.labourId === labour.id && p.point_date.toString().startsWith(selectedMonth));
-        const currentDeductions = (deductionRes.data || []).filter(d => d.labourId === labour.id && d.point_date.toString().startsWith(selectedMonth));
+        const currentPayments = (paymentRes.data || []).filter(p => p.labour_id === labour.id && p.payment_date.toString().startsWith(selectedMonth));
+        const currentDeductions = (deductionRes.data || []).filter(d => d.labour_id === labour.id && d.year === year && d.month.toString().padStart(2, '0') === month);
 
-        const paymentsMade = currentPayments.reduce((sum, p) => sum + Number(p.amount), 0) + (currentEntry ? Number(currentEntry.payments_made || 0) : 0);
+        const paymentsMade = currentPayments.reduce((sum, p) => sum + Number(p.amount), 0) + (currentEntry ? Number(currentEntry.total_payments || 0) : 0);
         
         let ration = 0, pocketMoney = 0, otherDeductions = 0;
         currentDeductions.forEach(d => {
-          const reason = (d.reason || '').toLowerCase();
-          if (reason.includes('ration')) ration += Number(d.amount);
-          else if (reason.includes('pocket')) pocketMoney += Number(d.amount);
-          else otherDeductions += Number(d.amount);
+          ration += Number(d.ration_amount || 0);
+          pocketMoney += Number(d.pocket_money_amount || 0);
+          otherDeductions += Number(d.other_deduction_amount || 0);
         });
 
         if (currentEntry) {
@@ -74,21 +73,27 @@ export function Reports() {
           const aDate = `${a.year}-${a.month.toString().padStart(2, '0')}-01`;
           return aDate < currentMonthDateStr;
         });
-        const prevPayments = (paymentRes.data || []).filter(p => p.point_date.toString() < currentMonthDateStr && p.labourId === labour.id);
-        const prevDeductions = (deductionRes.data || []).filter(d => d.point_date.toString() < currentMonthDateStr && d.labourId === labour.id);
-        const prevEntries = (monthlyEntriesRes.data || []).filter((m: any) => `${m.month}-01` < currentMonthDateStr && m.labourId === labour.id);
+        const prevPayments = (paymentRes.data || []).filter(p => p.payment_date.toString() < currentMonthDateStr && p.labour_id === labour.id);
+        const prevDeductions = (deductionRes.data || []).filter(d => {
+          const dDate = `${d.year}-${d.month.toString().padStart(2, '0')}-01`;
+          return dDate < currentMonthDateStr && d.labour_id === labour.id;
+        });
+        const prevEntries = (monthly_settlementRes.data || []).filter((m: any) => {
+          const mDate = `${m.year}-${m.month.toString().padStart(2, '0')}-01`;
+          return mDate < currentMonthDateStr && m.labour_id === labour.id;
+        });
 
-        const myPrevAttendance = prevAttendance.filter(a => a.labourId === labour.id);
-        const prevGross = myPrevAttendance.reduce((sum, a) => sum + (Number(a.days) * Number(labour.dailyRate)), 0) +
-          prevEntries.reduce((sum: number, m: any) => sum + (Number(m.attendance_days || 0) * Number(m.daily_rate || labour.dailyRate)), 0);
+        const myPrevAttendance = prevAttendance.filter(a => a.labour_id === labour.id);
+        const prevGross = myPrevAttendance.reduce((sum, a) => sum + (Number(a.attendance_days) * Number(labour.daily_rate)), 0) +
+          prevEntries.reduce((sum: number, m: any) => sum + (Number(m.attendance_days || 0) * Number(m.daily_rate || labour.daily_rate)), 0);
         const prevPaid = prevPayments.reduce((sum, p) => sum + Number(p.amount), 0) +
-          prevEntries.reduce((sum: number, m: any) => sum + Number(m.payments_made || 0), 0);
-        const prevDeducted = prevDeductions.reduce((sum, d) => sum + Number(d.amount), 0) +
+          prevEntries.reduce((sum: number, m: any) => sum + Number(m.total_payments || 0), 0);
+        const prevDeducted = prevDeductions.reduce((sum, d) => sum + Number(d.ration_amount || 0) + Number(d.pocket_money_amount || 0) + Number(d.other_deduction_amount || 0), 0) +
           prevEntries.reduce((sum: number, m: any) => sum + Number(m.total_deductions || 0), 0);
 
         const previousDue = prevGross - prevPaid - prevDeducted;
 
-        const grossSalary = Number(labour.dailyRate) * currentDays;
+        const grossSalary = Number(labour.daily_rate) * currentDays;
         const totalDeds = ration + pocketMoney + otherDeductions;
         const netSalary = grossSalary - totalDeds;
         const closingDue = previousDue + netSalary - paymentsMade;
@@ -96,9 +101,9 @@ export function Reports() {
         return {
           id: labour.id,
           name: labour.name,
-          displayId: labour.idNumber || 'NO ID',
+          displayId: labour.id_number || 'NO ID',
           site: labour.site ? labour.site.name : 'Unassigned',
-          dailyRate: Number(labour.dailyRate),
+          daily_rate: Number(labour.daily_rate),
           previousDue,
           presentDays: currentDays,
           grossSalary,
@@ -114,20 +119,20 @@ export function Reports() {
 
       setTableData(workers);
       
-      const manualActive = (attendanceRes.data || []).filter(a => a.year.toString() === year.toString() && a.month.toString().padStart(2, '0') === month && Number(a.days) > 0).map(a => a.labourId);
-      const entryActive = (monthlyEntriesRes.data || []).filter((m: any) => m.month === selectedMonth && Number(m.attendance_days) > 0).map((m: any) => m.labourId);
+      const manualActive = (attendanceRes.data || []).filter(a => a.year.toString() === year.toString() && a.month.toString().padStart(2, '0') === month && Number(a.attendance_days) > 0).map(a => a.labour_id);
+      const entryActive = (monthly_settlementRes.data || []).filter((m: any) => m.year === year && m.month === parseInt(month) && Number(m.attendance_days) > 0).map((m: any) => m.labour_id);
       const activeLabours = new Set([...manualActive, ...entryActive]).size;
 
-      const currentPaymentsRes = await supabase.from('payment').select('amount').like('point_date', `${selectedMonth}%`);
+      const currentPaymentsRes = await supabase.from('payment').select('amount').like('payment_date', `${selectedMonth}%`);
       const totalPayments = (currentPaymentsRes.data || []).reduce((sum, p) => sum + Number(p.amount), 0) + 
-            (monthlyEntriesRes.data || []).filter((m: any) => m.month === selectedMonth).reduce((sum: number, m: any) => sum + Number(m.payments_made || 0), 0);
+            (monthly_settlementRes.data || []).filter((m: any) => m.year === year && m.month === parseInt(month)).reduce((sum: number, m: any) => sum + Number(m.total_payments || 0), 0);
 
-      const currentDeductionsRes = await supabase.from('deduction').select('amount').like('point_date', `${selectedMonth}%`);
-      const totalDeductions = (currentDeductionsRes.data || []).reduce((sum, d) => sum + Number(d.amount), 0) +
-            (monthlyEntriesRes.data || []).filter((m: any) => m.month === selectedMonth).reduce((sum: number, m: any) => sum + Number(m.total_deductions || 0), 0);
+      const currentDeductionsRes = await supabase.from('deduction').select('*').eq('year', year).eq('month', parseInt(month));
+      const totalDeductions = (currentDeductionsRes.data || []).reduce((sum, d) => sum + Number(d.ration_amount || 0) + Number(d.pocket_money_amount || 0) + Number(d.other_deduction_amount || 0), 0) +
+            (monthly_settlementRes.data || []).filter((m: any) => m.year === year && m.month === parseInt(month)).reduce((sum: number, m: any) => sum + Number(m.total_deductions || 0), 0);
       
       const siteSummaries = (sitesRes.data || []).map(site => {
-        const count = (activeLaboursDataRes.data || []).filter(l => l.siteId === site.id).length;
+        const count = (activeLaboursDataRes.data || []).filter(l => l.site_id === site.id).length;
         const siteWorkers = workers.filter(w => w.site === site.name);
         const totalDue = siteWorkers.reduce((acc, curr) => acc + curr.closingDue, 0);
 
@@ -167,7 +172,7 @@ export function Reports() {
         'ID': w.displayId,
         'Name': w.name,
         'Site': w.site,
-        'Daily Rate': w.dailyRate,
+        'Daily Rate': w.daily_rate,
         'Prev Due': w.previousDue || 0,
         'Att. Days': w.presentDays || 0,
         'Gross Salary': w.grossSalary || 0,
@@ -245,46 +250,43 @@ export function Reports() {
     return dStr;
   };
 
-  const getEntryDate = (createdAt: any, monthStr: string) => {
+  const getEntryDate = (createdAt: any, year: number, month: number) => {
     if (createdAt && typeof createdAt === 'string' && createdAt.includes('T')) {
       return createdAt.split('T')[0];
     }
-    const [yStr, mStr] = monthStr.split('-');
-    const y = parseInt(yStr);
-    const m = parseInt(mStr);
     const todayNum = new Date();
-    if (todayNum.getFullYear() === y && todayNum.getMonth() + 1 === m) {
+    if (todayNum.getFullYear() === year && todayNum.getMonth() + 1 === month) {
       return todayNum.toISOString().split('T')[0];
     }
-    const lastDay = new Date(y, m, 0).getDate();
-    return `${y}-${m.toString().padStart(2, '0')}-${lastDay.toString().padStart(2, '0')}`;
+    const lastDay = new Date(year, month, 0).getDate();
+    return `${year}-${month.toString().padStart(2, '0')}-${lastDay.toString().padStart(2, '0')}`;
   };
 
   const getUniversalPaymentHistory = async () => {
-    const { data: payments, error: err1 } = await supabase.from('payment').select('*, labour(name, idNumber)');
+    const { data: payments, error: err1 } = await supabase.from('payment').select('*, labour(name, id_number)');
     if (err1) throw err1;
-    const { data: monthlyEntries, error: err2 } = await supabase.from('monthly_entries').select('*, labour(name, idNumber)');
+    const { data: monthly_settlement, error: err2 } = await supabase.from('monthly_settlement').select('*, labour(name, id_number)');
     if (err2) throw err2;
     
     let combined: any[] = [];
     if (payments) {
       combined = [...combined, ...payments.map(p => ({
-        date: p.point_date,
-        idNumber: p.labour?.idNumber || '',
+        date: p.payment_date,
+        id_number: p.labour?.id_number || '',
         name: p.labour?.name || '',
         amount: Number(p.amount),
         mode: p.mode || 'Cash',
         notes: p.notes || ''
       }))];
     }
-    if (monthlyEntries) {
-      combined = [...combined, ...monthlyEntries.filter(m => Number(m.payments_made) > 0).map(m => ({
-        date: getEntryDate(m.created_at, m.month),
-        idNumber: m.labour?.idNumber || '',
+    if (monthly_settlement) {
+      combined = [...combined, ...monthly_settlement.filter(m => Number(m.total_payments) > 0).map(m => ({
+        date: getEntryDate(m.created_at, m.year, m.month),
+        id_number: m.labour?.id_number || '',
         name: m.labour?.name || '',
-        amount: Number(m.payments_made),
+        amount: Number(m.total_payments),
         mode: 'Settlement',
-        notes: `Monthly Settlement - ${m.month}`
+        notes: `Monthly Settlement - ${m.year}-${m.month.toString().padStart(2, '0')}`
       }))];
     }
     combined.sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime());
@@ -299,7 +301,7 @@ export function Reports() {
       const combined = await getUniversalPaymentHistory();
       const dataToExport = combined.map(c => ({
         'Date': getDisplayDate(c.date),
-        'Labour ID': c.idNumber,
+        'Labour ID': c.id_number,
         'Labour Name': c.name,
         'Payment Mode': c.mode,
         'Amount': c.amount,
@@ -334,7 +336,7 @@ export function Reports() {
       const head = [['Date', 'ID', 'Name', 'Mode', 'Amount', 'Notes']];
       const body = combined.map(c => [
         getDisplayDate(c.date),
-        c.idNumber || '-',
+        c.id_number || '-',
         c.name || 'Unknown',
         c.mode,
         `${c.amount.toLocaleString()}`,

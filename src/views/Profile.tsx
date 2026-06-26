@@ -20,9 +20,9 @@ export function Profile({ worker, onNavigate }: Readonly<ProfileProps>) {
   const [selectedMonth, setSelectedMonth] = useState(today.toISOString().slice(0, 7)); // YYYY-MM
   
   // Forms state
-  const [attendanceForm, setAttendanceForm] = useState({ id: null as string | null, days: '' });
+  const [attendanceForm, setAttendanceForm] = useState({ id: null as string | null, attendance_days: '' });
   const [paymentForm, setPaymentForm] = useState({ id: null as string | null, date: today.toISOString().slice(0, 10), amount: '', mode: 'Cash', notes: '' });
-  const [deductionForm, setDeductionForm] = useState({ id: null as string | null, date: today.toISOString().slice(0, 10), amount: '', reason: '' });
+  const [deductionForm, setDeductionForm] = useState({ id: null as string | null, month: selectedMonthStr, year: selectedYearStr, ration_amount: '', pocket_money_amount: '', other_deduction_amount: '', notes: '' });
 
   useEffect(() => {
     if (worker?.id) fetchProfile();
@@ -31,13 +31,13 @@ export function Profile({ worker, onNavigate }: Readonly<ProfileProps>) {
   const fetchProfile = async () => {
     try {
       const labourRes = await supabase.from('labour').select('*, site(*)').eq('id', worker.id).single();
-      const attendanceRes = await supabase.from('attendance').select('*').eq('labourId', worker.id).order('year', { ascending: false }).order('month', { ascending: false });
-      const paymentRes = await supabase.from('payment').select('*').eq('labourId', worker.id).order('point_date', { ascending: false });
-      const deductionRes = await supabase.from('deduction').select('*').eq('labourId', worker.id).order('point_date', { ascending: false });
+      const attendanceRes = await supabase.from('attendance').select('*').eq('labour_id', worker.id).order('year', { ascending: false }).order('month', { ascending: false });
+      const paymentRes = await supabase.from('payment').select('*').eq('labour_id', worker.id).order('payment_date', { ascending: false });
+      const deductionRes = await supabase.from('deduction').select('*').eq('labour_id', worker.id).order('payment_date', { ascending: false });
       
-      let monthlyEntriesRes: any = { data: [] };
+      let monthly_settlementRes: any = { data: [] };
       try {
-        monthlyEntriesRes = await supabase.from('monthly_entries').select('*').eq('labourId', worker.id);
+        monthly_settlementRes = await supabase.from('monthly_settlement').select('*').eq('labour_id', worker.id);
       } catch (err) {
         // Table might not exist yet if Settlement tab wasn't visited
       }
@@ -45,14 +45,14 @@ export function Profile({ worker, onNavigate }: Readonly<ProfileProps>) {
       if (labourRes.data) {
         const labourWithSite = {
           ...labourRes.data,
-          siteName: labourRes.data.site ? labourRes.data.site.name : null
+          site_name: labourRes.data.site ? labourRes.data.site.name : null
         };
         setData({
           labour: labourWithSite,
           attendance: attendanceRes.data || [],
           payments: paymentRes.data || [],
           deductions: deductionRes.data || [],
-          monthlyEntries: monthlyEntriesRes.data || []
+          monthly_settlement: monthly_settlementRes.data || []
         });
       }
     } catch (err) {
@@ -63,7 +63,7 @@ export function Profile({ worker, onNavigate }: Readonly<ProfileProps>) {
   if (!worker) return <div className="p-4 text-center mt-10">No worker selected</div>;
   if (!data) return <div className="p-4 text-center mt-10">Loading profile data...</div>;
 
-  const { labour, attendance, payments, deductions, monthlyEntries = [] } = data;
+  const { labour, attendance, payments, deductions, monthly_settlement = [] } = data;
 
   // Process data based on selectedMonth
   const selectedYearStr = selectedMonth.split('-')[0];
@@ -72,20 +72,20 @@ export function Profile({ worker, onNavigate }: Readonly<ProfileProps>) {
 
   // Fetch individual table data for THIS month
   const currentAttendance = attendance.find(a => a.year.toString() === selectedYearStr && a.month.toString().padStart(2, '0') === selectedMonthStr);
-  const currentDaysManual = currentAttendance ? Number(currentAttendance.days) : 0;
+  const currentDaysManual = currentAttendance ? Number(currentAttendance.attendance_days) : 0;
   
-  const currentPayments = payments.filter(p => p.point_date.startsWith(selectedMonth));
-  const currentDeductions = deductions.filter(d => d.point_date.startsWith(selectedMonth));
+  const currentPayments = payments.filter(p => p.payment_date.startsWith(selectedMonth));
+  const currentDeductions = deductions.filter(d => d.year.toString() === selectedYearStr && d.month.toString().padStart(2, '0') === selectedMonthStr);
 
   // Fetch compiled Monthly Entry for THIS month (from Settlement section)
-  const currentMonthlyEntry = monthlyEntries.find(m => m.month === selectedMonth);
+  const currentMonthlyEntry = monthly_settlement.find(m => m.month === selectedMonth);
 
   // Combine manual inputs with bulk monthly entry stats
   const currentDays = currentDaysManual + (currentMonthlyEntry?.attendance_days || 0);
 
-  const totalPaidThisMonth = currentPayments.reduce((sum, p) => sum + Number(p.amount), 0) + (currentMonthlyEntry?.payments_made || 0);
-  const totalDeductedThisMonth = currentDeductions.reduce((sum, d) => sum + Number(d.amount), 0) + (currentMonthlyEntry?.total_deductions || 0);
-  const grossSalaryThisMonth = currentDays * Number(labour.dailyRate);
+  const totalPaidThisMonth = currentPayments.reduce((sum, p) => sum + Number(p.amount), 0) + (currentMonthlyEntry?.total_payments || 0);
+  const totalDeductedThisMonth = currentDeductions.reduce((sum, d) => sum + Number(d.ration_amount || 0) + Number(d.pocket_money_amount || 0) + Number(d.other_deduction_amount || 0), 0) + (currentMonthlyEntry?.total_deductions || 0);
+  const grossSalaryThisMonth = currentDays * Number(labour.daily_rate);
 
   // Calculate PREVIOUS due (up to the end of last month)
   // Everything before selectedMonth
@@ -93,15 +93,18 @@ export function Profile({ worker, onNavigate }: Readonly<ProfileProps>) {
     const aDate = `${a.year}-${a.month.toString().padStart(2, '0')}-01`;
     return aDate < currentMonthDateStr;
   });
-  const previousPayments = payments.filter(p => p.point_date < currentMonthDateStr);
-  const previousDeductions = deductions.filter(d => d.point_date < currentMonthDateStr);
-  const previousMonthlyEntries = monthlyEntries.filter(m => `${m.month}-01` < currentMonthDateStr);
+  const previousPayments = payments.filter(p => p.payment_date < currentMonthDateStr);
+  const previousDeductions = deductions.filter(d => {
+    const dDate = `${d.year}-${d.month.toString().padStart(2, '0')}-01`;
+    return dDate < currentMonthDateStr;
+  });
+  const previousMonthlyEntries = monthly_settlement.filter(m => `${m.month}-01` < currentMonthDateStr);
 
-  const prevGross = previousAttendance.reduce((sum, a) => sum + (Number(a.days) * Number(labour.dailyRate)), 0) 
-    + previousMonthlyEntries.reduce((sum, m) => sum + (Number(m.attendance_days || 0) * Number(m.daily_rate || labour.dailyRate)), 0);
+  const prevGross = previousAttendance.reduce((sum, a) => sum + (Number(a.attendance_days) * Number(labour.daily_rate)), 0) 
+    + previousMonthlyEntries.reduce((sum, m) => sum + (Number(m.attendance_days || 0) * Number(m.daily_rate || labour.daily_rate)), 0);
   const prevPaid = previousPayments.reduce((sum, p) => sum + Number(p.amount), 0)
-    + previousMonthlyEntries.reduce((sum, m) => sum + Number(m.payments_made || 0), 0);
-  const prevDeducted = previousDeductions.reduce((sum, d) => sum + Number(d.amount), 0)
+    + previousMonthlyEntries.reduce((sum, m) => sum + Number(m.total_payments || 0), 0);
+  const prevDeducted = previousDeductions.reduce((sum, d) => sum + Number(d.ration_amount || 0) + Number(d.pocket_money_amount || 0) + Number(d.other_deduction_amount || 0), 0)
     + previousMonthlyEntries.reduce((sum, m) => sum + Number(m.total_deductions || 0), 0);
 
   const previousDue = prevGross - prevPaid - prevDeducted;
@@ -132,14 +135,17 @@ export function Profile({ worker, onNavigate }: Readonly<ProfileProps>) {
   };
 
   const historyItems = [
-    ...attendance.map(a => ({ date: getEntryDate(a.created_at, a.year.toString(), a.month.toString()), type: 'Salary (Manual Att.)', amount: Number(a.days) * Number(labour.dailyRate), debit: 0, credit: Number(a.days) * Number(labour.dailyRate) })),
-    ...payments.map(p => ({ date: p.point_date, type: `Payment (${p.mode})`, amount: Number(p.amount), debit: Number(p.amount), credit: 0 })),
-    ...deductions.map(d => ({ date: d.point_date, type: `Deduction (${d.reason})`, amount: Number(d.amount), debit: Number(d.amount), credit: 0 })),
+    ...attendance.map(a => ({ date: getEntryDate(a.created_at, a.year.toString(), a.month.toString()), type: 'Salary (Manual Att.)', amount: Number(a.attendance_days) * Number(labour.daily_rate), debit: 0, credit: Number(a.attendance_days) * Number(labour.daily_rate) })),
+    ...payments.map(p => ({ date: p.payment_date, type: `Payment (${p.mode})`, amount: Number(p.amount), debit: Number(p.amount), credit: 0 })),
+    ...deductions.map(d => {
+      const dTotal = Number(d.ration_amount || 0) + Number(d.pocket_money_amount || 0) + Number(d.other_deduction_amount || 0);
+      return { date: getEntryDate(null, d.year.toString(), d.month.toString()), type: `Deduction (${d.notes || 'Monthly'})`, amount: dTotal, debit: dTotal, credit: 0 };
+    }),
     // Include bulk monthly entries
-    ...monthlyEntries.map(m => {
+    ...monthly_settlement.map(m => {
        const [yearStr, monthStr] = m.month.split('-');
-       const mCredit = Number(m.attendance_days || 0) * Number(m.daily_rate || labour.dailyRate);
-       const mDebit = Number(m.payments_made || 0) + Number(m.total_deductions || 0);
+       const mCredit = Number(m.attendance_days || 0) * Number(m.daily_rate || labour.daily_rate);
+       const mDebit = Number(m.total_payments || 0) + Number(m.total_deductions || 0);
        return { date: getEntryDate(m.created_at, yearStr, monthStr), type: `Settlement Record (${m.month})`, amount: Math.abs(mCredit - mDebit), debit: mDebit, credit: mCredit };
     }).filter(m => m.debit > 0 || m.credit > 0)
   ].sort((a, b) => new Date(a.date).getTime() - new Date(b.date).getTime());
@@ -155,24 +161,24 @@ export function Profile({ worker, onNavigate }: Readonly<ProfileProps>) {
     e.preventDefault();
     try {
       // Upsert: First check if it exists
-      const existing = await supabase.from('attendance').select('id').eq('labourId', labour.id).eq('year', parseInt(selectedYearStr)).eq('month', selectedMonthStr).single();
+      const existing = await supabase.from('attendance').select('id').eq('labour_id', labour.id).eq('year', parseInt(selectedYearStr)).eq('month', selectedMonthStr).single();
       
       let error;
       if (existing.data) {
-        const res = await supabase.from('attendance').update({ days: parseFloat(attendanceForm.days) }).eq('id', existing.data.id);
+        const res = await supabase.from('attendance').update({ attendance_days: parseFloat(attendanceForm.attendance_days) }).eq('id', existing.data.id);
         error = res.error;
       } else {
         const res = await supabase.from('attendance').insert([{ 
-          labourId: labour.id, 
+          labour_id: labour.id, 
           year: parseInt(selectedYearStr), 
           month: selectedMonthStr, 
-          days: parseFloat(attendanceForm.days) 
+          attendance_days: parseFloat(attendanceForm.attendance_days) 
         }]);
         error = res.error;
       }
 
       if (!error) {
-        setAttendanceForm({ id: null, days: '' });
+        setAttendanceForm({ id: null, attendance_days: '' });
         fetchProfile();
       } else { alert(error.message); }
     } catch (err) { console.error(err); }
@@ -182,8 +188,8 @@ export function Profile({ worker, onNavigate }: Readonly<ProfileProps>) {
     e.preventDefault();
     try {
       const payload = {
-        labourId: labour.id,
-        point_date: paymentForm.date,
+        labour_id: labour.id,
+        payment_date: paymentForm.date,
         amount: parseFloat(paymentForm.amount),
         mode: paymentForm.mode,
         notes: paymentForm.notes
@@ -203,19 +209,30 @@ export function Profile({ worker, onNavigate }: Readonly<ProfileProps>) {
   const submitDeduction = async (e: React.FormEvent) => {
     e.preventDefault();
     try {
+      // Upsert based on month and year
+      const existing = await supabase.from('deduction').select('id').eq('labour_id', labour.id).eq('year', parseInt(selectedYearStr)).eq('month', parseInt(selectedMonthStr)).single();
+
       const payload = {
-        labourId: labour.id,
-        point_date: deductionForm.date,
-        amount: parseFloat(deductionForm.amount),
-        reason: deductionForm.reason
+        labour_id: labour.id,
+        year: parseInt(selectedYearStr),
+        month: parseInt(selectedMonthStr),
+        ration_amount: parseFloat(deductionForm.ration_amount) || 0,
+        pocket_money_amount: parseFloat(deductionForm.pocket_money_amount) || 0,
+        other_deduction_amount: parseFloat(deductionForm.other_deduction_amount) || 0,
+        notes: deductionForm.notes
       };
 
-      const { error } = deductionForm.id
-        ? await supabase.from('deduction').update(payload).eq('id', deductionForm.id)
-        : await supabase.from('deduction').insert([payload]);
+      let error;
+      if (existing.data) {
+        const res = await supabase.from('deduction').update(payload).eq('id', existing.data.id);
+        error = res.error;
+      } else {
+        const res = await supabase.from('deduction').insert([payload]);
+        error = res.error;
+      }
       
       if (!error) {
-        setDeductionForm({ id: null, date: today.toISOString().slice(0, 10), amount: '', reason: '' });
+        setDeductionForm({ id: null, month: selectedMonthStr, year: selectedYearStr, ration_amount: '', pocket_money_amount: '', other_deduction_amount: '', notes: '' });
         fetchProfile();
       } else { alert(error.message); }
     } catch (err) { console.error(err); }
@@ -288,9 +305,9 @@ export function Profile({ worker, onNavigate }: Readonly<ProfileProps>) {
           <div>
             <h2 className="text-2xl font-bold text-on-surface tracking-tight">{labour.name}</h2>
             <div className="text-xs text-on-surface-variant font-medium flex gap-2 items-center mt-1 uppercase tracking-wider">
-              <span className="bg-surface-container px-2 py-0.5 rounded border border-outline-variant/50">{labour.idNumber || 'NO ID'}</span>
+              <span className="bg-surface-container px-2 py-0.5 rounded border border-outline-variant/50">{labour.id_number || 'NO ID'}</span>
               <span>•</span>
-              <span>{labour.siteName || 'Unassigned'}</span>
+              <span>{labour.site_name || 'Unassigned'}</span>
             </div>
           </div>
         </div>
@@ -302,7 +319,7 @@ export function Profile({ worker, onNavigate }: Readonly<ProfileProps>) {
           </div>
           <div className="flex items-center gap-2 text-xs font-semibold text-on-surface-variant">
             <Home className="w-3.5 h-3.5 text-primary" />
-            Rate: ₹{labour.dailyRate}/day
+            Rate: ₹{labour.daily_rate}/day
           </div>
         </div>
       </div>
@@ -382,7 +399,7 @@ export function Profile({ worker, onNavigate }: Readonly<ProfileProps>) {
                </div>
                <div>
                  <label className="text-xs font-bold mb-1 block text-on-surface-variant">Days Present</label>
-                 <input type="number" step="0.5" className="w-full border border-outline-variant rounded p-2 text-sm bg-surface-container-low focus:border-primary outline-none" value={attendanceForm.days} onChange={e => setAttendanceForm({...attendanceForm, days: e.target.value})} required/>
+                 <input type="number" step="0.5" className="w-full border border-outline-variant rounded p-2 text-sm bg-surface-container-low focus:border-primary outline-none" value={attendanceForm.attendance_days} onChange={e => setAttendanceForm({...attendanceForm, attendance_days: e.target.value})} required/>
                </div>
              </div>
              <button type="submit" className="bg-primary text-white py-2 rounded-md justify-center flex items-center font-bold text-sm gap-2 mt-2">
@@ -397,7 +414,7 @@ export function Profile({ worker, onNavigate }: Readonly<ProfileProps>) {
                     <p className="text-xs font-bold text-on-surface">{a.year}-{a.month.toString().padStart(2, '0')}</p>
                  </div>
                  <div className="flex items-center gap-4 text-right">
-                    <p className="text-sm font-extrabold text-primary">{Number(a.days).toFixed(1)} Days</p>
+                    <p className="text-sm font-extrabold text-primary">{Number(a.attendance_days).toFixed(1)} Days</p>
                  </div>
                </div>
              ))}
@@ -444,7 +461,7 @@ export function Profile({ worker, onNavigate }: Readonly<ProfileProps>) {
              {payments.map(p => (
                <div key={p.id} className="bg-surface-bright p-3 rounded-lg border border-outline-variant flex justify-between items-center shadow-sm hover:shadow-md transition-shadow">
                  <div>
-                    <p className="text-xs font-bold text-on-surface">{getDisplayDate(p.point_date)}</p>
+                    <p className="text-xs font-bold text-on-surface">{getDisplayDate(p.payment_date)}</p>
                     <p className="text-[11px] text-on-surface-variant mt-0.5">
                       <span className="font-bold text-on-surface">{p.mode}</span>
                       {p.notes && ` • ${p.notes}`}
@@ -455,7 +472,7 @@ export function Profile({ worker, onNavigate }: Readonly<ProfileProps>) {
                     <button 
                       onClick={() => {
                         window.scrollTo({ top: 0, behavior: 'smooth' });
-                        setPaymentForm({ id: p.id, date: p.point_date, amount: p.amount.toString(), mode: p.mode || 'Cash', notes: p.notes || '' });
+                        setPaymentForm({ id: p.id, date: p.payment_date, amount: p.amount.toString(), mode: p.mode || 'Cash', notes: p.notes || '' });
                       }}
                       className="p-1.5 text-on-surface-variant hover:text-success hover:bg-success/10 rounded-md transition-colors"
                       title="Edit Payment"
@@ -478,18 +495,26 @@ export function Profile({ worker, onNavigate }: Readonly<ProfileProps>) {
         <div className="space-y-4">
           <form className="bg-surface-bright rounded-lg border border-outline-variant p-4 flex flex-col gap-3" onSubmit={submitDeduction}>
              <h3 className="text-sm font-bold border-b border-outline-variant pb-2">Record Deduction</h3>
-             <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+             <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
                <div>
-                 <label className="text-xs font-bold mb-1 block text-on-surface-variant">Date</label>
-                 <input type="date" className="w-full border border-outline-variant rounded p-2 text-sm bg-surface-container-low focus:border-primary outline-none" value={deductionForm.date} onChange={e => setDeductionForm({...deductionForm, date: e.target.value})} required/>
+                 <label className="text-xs font-bold mb-1 block text-on-surface-variant">Selected Month</label>
+                 <input type="month" className="w-full border border-outline-variant rounded p-2 text-sm bg-surface-container-low font-bold cursor-not-allowed text-on-surface-variant" value={selectedMonth} disabled/>
                </div>
                <div>
-                 <label className="text-xs font-bold mb-1 block text-on-surface-variant">Amount (₹)</label>
-                 <input type="number" className="w-full border border-outline-variant rounded p-2 text-sm bg-surface-container-low focus:border-primary outline-none" value={deductionForm.amount} onChange={e => setDeductionForm({...deductionForm, amount: e.target.value})} required/>
+                 <label className="text-xs font-bold mb-1 block text-on-surface-variant">Ration (₹)</label>
+                 <input type="number" className="w-full border border-outline-variant rounded p-2 text-sm bg-surface-container-low focus:border-primary outline-none" value={deductionForm.ration_amount} onChange={e => setDeductionForm({...deductionForm, ration_amount: e.target.value})}/>
                </div>
                <div>
-                 <label className="text-xs font-bold mb-1 block text-on-surface-variant">Reason (e.g., Ration, Advance)</label>
-                 <input type="text" className="w-full border border-outline-variant rounded p-2 text-sm bg-surface-container-low focus:border-primary outline-none" value={deductionForm.reason} onChange={e => setDeductionForm({...deductionForm, reason: e.target.value})} required/>
+                 <label className="text-xs font-bold mb-1 block text-on-surface-variant">Pocket Money (₹)</label>
+                 <input type="number" className="w-full border border-outline-variant rounded p-2 text-sm bg-surface-container-low focus:border-primary outline-none" value={deductionForm.pocket_money_amount} onChange={e => setDeductionForm({...deductionForm, pocket_money_amount: e.target.value})}/>
+               </div>
+               <div>
+                 <label className="text-xs font-bold mb-1 block text-on-surface-variant">Other (₹)</label>
+                 <input type="number" className="w-full border border-outline-variant rounded p-2 text-sm bg-surface-container-low focus:border-primary outline-none" value={deductionForm.other_deduction_amount} onChange={e => setDeductionForm({...deductionForm, other_deduction_amount: e.target.value})}/>
+               </div>
+               <div className="lg:col-span-4">
+                 <label className="text-xs font-bold mb-1 block text-on-surface-variant">Notes</label>
+                 <input type="text" className="w-full border border-outline-variant rounded p-2 text-sm bg-surface-container-low focus:border-primary outline-none" value={deductionForm.notes} onChange={e => setDeductionForm({...deductionForm, notes: e.target.value})}/>
                </div>
              </div>
              <button type="submit" className="bg-error text-white py-2 rounded-md justify-center flex items-center font-bold text-sm gap-2">
@@ -498,18 +523,21 @@ export function Profile({ worker, onNavigate }: Readonly<ProfileProps>) {
           </form>
           <div className="mt-6 space-y-3">
              <h3 className="text-sm font-bold text-on-surface">Deduction History</h3>
-             {deductions.map(d => (
+             {deductions.map(d => {
+               const dTotal = Number(d.ration_amount || 0) + Number(d.pocket_money_amount || 0) + Number(d.other_deduction_amount || 0);
+               return (
                <div key={d.id} className="bg-surface-bright p-3 rounded-lg border border-outline-variant flex justify-between items-center shadow-sm hover:shadow-md transition-shadow">
                  <div>
-                    <p className="text-xs font-bold text-on-surface">{getDisplayDate(d.point_date)}</p>
-                    <p className="text-[11px] text-on-surface-variant font-medium mt-0.5">{d.reason}</p>
+                    <p className="text-xs font-bold text-on-surface">{d.year}-{d.month.toString().padStart(2, '0')}</p>
+                    <p className="text-[11px] text-on-surface-variant font-medium mt-0.5">{d.notes}</p>
                  </div>
                  <div className="flex items-center gap-4 text-right">
-                    <p className="text-sm font-extrabold text-error">₹{Number(d.amount).toLocaleString()}</p>
+                    <p className="text-sm font-extrabold text-error">₹{dTotal.toLocaleString()}</p>
                     <button 
                       onClick={() => {
                         window.scrollTo({ top: 0, behavior: 'smooth' });
-                        setDeductionForm({ id: d.id, date: d.point_date, amount: d.amount.toString(), reason: d.reason || '' });
+                        setDeductionForm({ id: d.id, month: d.month.toString().padStart(2, '0'), year: d.year.toString(), ration_amount: d.ration_amount.toString(), pocket_money_amount: d.pocket_money_amount.toString(), other_deduction_amount: d.other_deduction_amount.toString(), notes: d.notes || '' });
+                        setSelectedMonth(`${d.year}-${d.month.toString().padStart(2, '0')}`);
                       }}
                       className="p-1.5 text-on-surface-variant hover:text-error hover:bg-error/10 rounded-md transition-colors"
                       title="Edit Deduction"
@@ -518,7 +546,7 @@ export function Profile({ worker, onNavigate }: Readonly<ProfileProps>) {
                     </button>
                  </div>
                </div>
-             ))}
+             )})}
              {deductions.length === 0 && (
                <div className="p-4 text-center text-on-surface-variant text-xs border border-outline-variant border-dashed rounded-lg bg-surface-bright">
                  No past deductions recorded.

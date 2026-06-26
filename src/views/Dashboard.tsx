@@ -28,6 +28,9 @@ export function Dashboard() {
     setIsLoading(true);
     try {
       // 1. Fetch active labours and sites
+      const currentYear = today.getFullYear();
+      const currentMonthInt = today.getMonth() + 1;
+      
       const { data: labours } = await supabase.from('labour').select('*, site(name)').eq('is_archived', false);
       const { data: sites } = await supabase.from('site').select('*');
       
@@ -35,7 +38,7 @@ export function Dashboard() {
       const { data: payments } = await supabase.from('payment').select('*');
       const { data: deductions } = await supabase.from('deduction').select('*');
       const { data: attendance } = await supabase.from('attendance').select('*');
-      const { data: monthlyEntries } = await supabase.from('monthly_entries').select('*');
+      const { data: monthly_settlement } = await supabase.from('monthly_settlement').select('*');
 
       // Process Stats
       let currentPayroll = 0;
@@ -47,18 +50,18 @@ export function Dashboard() {
       });
 
       const processedLabours = (labours || []).map(labour => {
-        const labAtt = attendance?.filter(a => a.labourId === labour.id) || [];
-        const labPay = payments?.filter(p => p.labourId === labour.id) || [];
-        const labDed = deductions?.filter(d => d.labourId === labour.id) || [];
-        const labEntries = monthlyEntries?.filter(m => m.labourId === labour.id) || [];
+        const labAtt = attendance?.filter(a => a.labour_id === labour.id) || [];
+        const labPay = payments?.filter(p => p.labour_id === labour.id) || [];
+        const labDed = deductions?.filter(d => d.labour_id === labour.id) || [];
+        const labEntries = monthly_settlement?.filter(m => m.labour_id === labour.id) || [];
 
         // Total gross
-        const manualGross = labAtt.reduce((sum, a) => sum + (Number(a.days) * Number(labour.dailyRate)), 0);
-        const monthlyGross = labEntries.reduce((sum, m) => sum + (Number(m.attendance_days || 0) * Number(m.daily_rate || labour.dailyRate)), 0);
+        const manualGross = labAtt.reduce((sum, a) => sum + (Number(a.attendance_days) * Number(labour.daily_rate)), 0);
+        const monthlyGross = labEntries.reduce((sum, m) => sum + (Number(m.attendance_days || 0) * Number(m.daily_rate || labour.daily_rate)), 0);
         
         // Total payments
         const manualPaid = labPay.reduce((sum, p) => sum + Number(p.amount), 0);
-        const monthlyPaid = labEntries.reduce((sum, m) => sum + Number(m.payments_made || 0), 0);
+        const monthlyPaid = labEntries.reduce((sum, m) => sum + Number(m.total_payments || 0), 0);
         
         // Total deductions
         const manualDed = labDed.reduce((sum, d) => sum + Number(d.amount), 0);
@@ -72,18 +75,18 @@ export function Dashboard() {
         const currentDue = netSalary - totalPaid;
 
         // Current month payroll just based on attendance in this month (estimate)
-        const currMonthManualAtt = labAtt.find(a => a.year === today.getFullYear() && a.month === (today.getMonth() + 1).toString().padStart(2, '0'));
-        const currMonthEntry = labEntries.find(m => m.month === currentMonth);
-        const currDays = (currMonthManualAtt ? Number(currMonthManualAtt.days) : 0) + (currMonthEntry ? Number(currMonthEntry.attendance_days) : 0);
-        const currPayroll = currDays * Number(labour.dailyRate);
+        const currMonthManualAtt = labAtt.find(a => a.year === currentYear && a.month === currentMonthInt);
+        const currMonthEntry = labEntries.find(m => m.month === currentMonthInt && m.year === currentYear);
+        const currDays = (currMonthManualAtt ? Number(currMonthManualAtt.attendance_days || 0) : 0) + (currMonthEntry ? Number(currMonthEntry.attendance_days || 0) : 0);
+        const currPayroll = currDays * Number(labour.daily_rate);
 
         currentPayroll += currPayroll;
         totalPendingDues += currentDue;
 
-        if (labour.siteId && siteMap[labour.siteId]) {
-           siteMap[labour.siteId].labourCount += 1;
-           siteMap[labour.siteId].monthlyPayroll += currPayroll;
-           siteMap[labour.siteId].pendingDue += currentDue;
+        if (labour.site_id && siteMap[labour.site_id]) {
+           siteMap[labour.site_id].labourCount += 1;
+           siteMap[labour.site_id].monthlyPayroll += currPayroll;
+           siteMap[labour.site_id].pendingDue += currentDue;
         }
 
         return {
@@ -101,9 +104,9 @@ export function Dashboard() {
       const daysInMonth = new Date(today.getFullYear(), today.getMonth() + 1, 0).getDate();
       let totalPossibleDays = (labours?.length || 0) * daysInMonth;
       let totalActualDays = processedLabours.reduce((acc, l) => {
-        const att = attendance?.find(a => a.labourId === l.id && a.year === today.getFullYear() && a.month === (today.getMonth() + 1).toString().padStart(2, '0'));
-        const ent = monthlyEntries?.find(m => m.labourId === l.id && m.month === currentMonth);
-        return acc + (att ? Number(att.days) : 0) + (ent ? Number(ent.attendance_days) : 0);
+        const att = attendance?.find(a => a.labour_id === l.id && a.year === currentYear && a.month === currentMonthInt);
+        const ent = monthly_settlement?.find(m => m.labour_id === l.id && m.month === currentMonthInt && m.year === currentYear);
+        return acc + (att ? Number(att.attendance_days || 0) : 0) + (ent ? Number(ent.attendance_days || 0) : 0);
       }, 0);
       const attPercent = totalPossibleDays > 0 ? Math.round((totalActualDays / totalPossibleDays) * 100) : 0;
 
@@ -111,16 +114,16 @@ export function Dashboard() {
       const allActivities = [
         ...(payments || []).map(p => ({
           id: `p-${p.id}`,
-          title: `Payment to Labour #${p.labourId}`,
+          title: `Payment to Labour #${p.labour_id}`,
           description: `₹${p.amount} paid via ${p.mode} (${p.notes || ''})`,
-          date: p.point_date,
+          date: p.payment_date,
           time: new Date(p.created_at || new Date()).toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'})
         })),
         ...(deductions || []).map(d => ({
           id: `d-${d.id}`,
-          title: `Deduction for Labour #${d.labourId}`,
-          description: `₹${d.amount} deducted for ${d.reason}`,
-          date: d.point_date,
+          title: `Deduction for Labour #${d.labour_id}`,
+          description: `₹${d.amount} deducted for ${d.notes}`,
+          date: d.payment_date,
           time: new Date(d.created_at || new Date()).toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'})
         }))
       ].sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime()).slice(0, 15);
@@ -183,7 +186,7 @@ export function Dashboard() {
             <div className="overflow-y-auto">
                <div className="overflow-x-auto">
                  {data.sitesSummary.length > 0 ? (
-                 <table className="w-full text-left border-collapse min-w-[500px]">
+                 <table className="w-full text-left border-collapse sm:min-w-[500px]">
                     <thead className="bg-surface-container-low/50 border-b border-outline-variant text-[10px] uppercase sticky top-0 z-10">
                       <tr>
                         <th className="p-3 font-semibold text-on-surface-variant border-r border-outline-variant/30">Site Name</th>
@@ -220,7 +223,7 @@ export function Dashboard() {
              <div className="overflow-y-auto">
                 <div className="overflow-x-auto custom-scrollbar pb-2">
                   {data.pendingLabours.length > 0 ? (
-                  <table className="w-full text-left border-collapse min-w-[400px]">
+                  <table className="w-full text-left border-collapse sm:min-w-[400px]">
                       <tbody className="divide-y divide-error/10 text-sm">
                         {data.pendingLabours.map(w => (
                           <tr key={w.id} className="hover:bg-error/5 transition-colors">

@@ -32,7 +32,14 @@ export function Settlement() {
       
       const labours = laboursRes.data || [];
       
-      const entriesRes = await supabase.from('monthly_entries').select('*').eq('month', selectedMonth);
+      const [yearStr, monthStr] = selectedMonth.split('-');
+      const currentYear = parseInt(yearStr);
+      const currentMonth = parseInt(monthStr);
+
+      const entriesRes = await supabase.from('monthly_settlement')
+        .select('*')
+        .eq('year', currentYear)
+        .eq('month', currentMonth);
       
       if (entriesRes.error) {
         if (entriesRes.error.code === '42P01' || entriesRes.error.code === 'PGRST205') {
@@ -47,19 +54,19 @@ export function Settlement() {
       const entries = entriesRes.data || [];
 
       const settlementData = labours.map((labour: any) => {
-        const entry = entries.find(e => e.labourId === labour.id) || {};
+        const entry = entries.find(e => e.labour_id === labour.id) || {};
         
         return {
           id: labour.id,
           name: labour.name,
-          displayId: labour.idNumber || 'NO ID',
+          displayId: labour.id_number || 'NO ID',
           site: labour.site ? labour.site.name : 'Unassigned',
-          dailyRate: entry.daily_rate !== undefined ? Number(entry.daily_rate) : Number(labour.dailyRate),
-          attendance_days: entry.attendance_days || 0,
+          daily_rate: entry.daily_rate !== undefined ? Number(entry.daily_rate) : Number(labour.daily_rate),
+          attendance_attendance_days: entry.attendance_days || 0,
           ration: entry.ration || 0,
           pocket_money: entry.pocket_money || 0,
           other_deduction: entry.other_deduction || 0,
-          payments_made: entry.payments_made || 0,
+          total_payments: entry.total_payments || 0,
           _entryId: entry.id || null
         };
       });
@@ -79,23 +86,23 @@ export function Settlement() {
   const exportExcel = () => {
     try {
       const data = workers.map((w: any) => {
-        const grossSalary = w.dailyRate * (w.attendance_days || 0);
+        const grossSalary = w.daily_rate * (w.attendance_days || 0);
         const totalDeductions = (w.ration || 0) + (w.pocket_money || 0) + (w.other_deduction || 0);
         const netSalary = grossSalary - totalDeductions;
-        const closingDue = netSalary - (w.payments_made || 0);
+        const closingDue = netSalary - (w.total_payments || 0);
         
         return {
           'ID': w.displayId,
           'Name': w.name,
           'Site': w.site,
-          'Daily Rate': w.dailyRate,
+          'Daily Rate': w.daily_rate,
           'Att. Days': w.attendance_days || 0,
           'Gross Salary': grossSalary,
           'Ration': w.ration || 0,
           'Pocket Money': w.pocket_money || 0,
           'Other Deductions': w.other_deduction || 0,
           'Net Salary': netSalary,
-          'Payments Made': w.payments_made || 0,
+          'Payments Made': w.total_payments || 0,
           'Closing Due': closingDue
         };
       });
@@ -115,30 +122,32 @@ export function Settlement() {
     
     try {
       for (const w of workers) {
-        const grossSalary = Number(w.dailyRate) * Number(w.attendance_days);
+        const grossSalary = Number(w.daily_rate) * Number(w.attendance_days);
         const totalDeductions = Number(w.ration) + Number(w.pocket_money) + Number(w.other_deduction);
         const netSalary = grossSalary - totalDeductions;
         
+        const [yearStr, monthStr] = selectedMonth.split('-');
         const payload = {
-          labourId: w.id,
-          month: selectedMonth,
-          attendance_days: w.attendance_days,
-          daily_rate: w.dailyRate,
+          labour_id: w.id,
+          month: parseInt(monthStr),
+          year: parseInt(yearStr),
+          attendance_attendance_days: w.attendance_days,
+          daily_rate: w.daily_rate,
           ration: w.ration,
           pocket_money: w.pocket_money,
           other_deduction: w.other_deduction,
           gross_salary: grossSalary,
           total_deductions: totalDeductions,
           net_salary: netSalary,
-          payments_made: w.payments_made
+          total_payments: w.total_payments
         };
 
         if (w._entryId) {
-          await supabase.from('monthly_entries').update(payload).eq('id', w._entryId);
+          await supabase.from('monthly_settlement').update(payload).eq('id', w._entryId);
         } else {
           // If all default 0, skip insert to save space unless explicitly populated? 
           // We can just insert it
-          const { data } = await supabase.from('monthly_entries').insert([payload]).select().single();
+          const { data } = await supabase.from('monthly_settlement').insert([payload]).select().single();
           if (data) w._entryId = data.id;
         }
       }
@@ -161,11 +170,11 @@ export function Settlement() {
           <div className="flex items-center gap-2 font-bold mb-2">
             <AlertTriangle className="w-5 h-5" /> Action Required: Database Table Missing
           </div>
-          <p className="mb-2">The <strong>monthly_entries</strong> table does not exist. Please run the following SQL command in your Supabase Dashboard SQL editor:</p>
+          <p className="mb-2">The <strong>monthly_settlement</strong> table does not exist. Please run the following SQL command in your Supabase Dashboard SQL editor:</p>
           <pre className="bg-surface-bright border border-error/20 p-3 rounded text-xs overflow-x-auto selection:bg-error/20">
-{`CREATE TABLE monthly_entries (
+{`CREATE TABLE monthly_settlement (
   id SERIAL PRIMARY KEY,
-  "labourId" INTEGER REFERENCES labour(id) ON DELETE CASCADE,
+  "labour_id" INTEGER REFERENCES labour(id) ON DELETE CASCADE,
   month VARCHAR(7) NOT NULL,
   attendance_days NUMERIC(10, 2) DEFAULT 0,
   daily_rate NUMERIC(10, 2) DEFAULT 0,
@@ -175,8 +184,8 @@ export function Settlement() {
   gross_salary NUMERIC(10, 2) DEFAULT 0,
   total_deductions NUMERIC(10, 2) DEFAULT 0,
   net_salary NUMERIC(10, 2) DEFAULT 0,
-  payments_made NUMERIC(10, 2) DEFAULT 0,
-  UNIQUE("labourId", month)
+  total_payments NUMERIC(10, 2) DEFAULT 0,
+  UNIQUE("labour_id", month)
 );`}
           </pre>
           <button onClick={fetchSettlement} className="mt-3 bg-error text-white px-4 py-1.5 rounded text-xs font-bold hover:bg-error/90">
@@ -253,10 +262,10 @@ export function Settlement() {
                   </thead>
                   <tbody className="divide-y divide-outline-variant font-medium text-sm">
                     {filteredWorkers.map((w) => {
-                      const grossSalary = w.dailyRate * (w.attendance_days || 0);
+                      const grossSalary = w.daily_rate * (w.attendance_days || 0);
                       const totalDeductions = (w.ration || 0) + (w.pocket_money || 0) + (w.other_deduction || 0);
                       const netSalary = grossSalary - totalDeductions;
-                      const closingDue = netSalary - (w.payments_made || 0);
+                      const closingDue = netSalary - (w.total_payments || 0);
                       
                       return (
                         <tr key={w.id} className="hover:bg-surface-container-low transition-colors group">
@@ -279,8 +288,8 @@ export function Settlement() {
                           <td className="p-3 border-r border-outline-variant/50 text-right align-middle">
                             <input 
                                 type="number" 
-                                value={w.dailyRate}
-                                onChange={(e) => handleUpdate(w.id, 'dailyRate', parseFloat(e.target.value) || 0)}
+                                value={w.daily_rate}
+                                onChange={(e) => handleUpdate(w.id, 'daily_rate', parseFloat(e.target.value) || 0)}
                                 className="w-16 text-right border p-1 border-outline-variant/30 text-xs font-bold bg-surface-bright rounded focus:border-on-surface focus:ring-1 focus:ring-on-surface shadow-inner outline-none transition-all"
                               />
                           </td>
@@ -330,7 +339,7 @@ export function Settlement() {
                           <td className="p-2 border-r border-outline-variant/50 text-center align-middle bg-success/5">
                               <input 
                                 title="Payments Made (Advances + Final)"
-                                type="number" value={w.payments_made || ''} onChange={(e) => handleUpdate(w.id, 'payments_made', parseFloat(e.target.value) || 0)}
+                                type="number" value={w.total_payments || ''} onChange={(e) => handleUpdate(w.id, 'total_payments', parseFloat(e.target.value) || 0)}
                                 className="w-[60px] text-center border border-success/30 p-1 text-sm font-bold bg-surface-bright rounded text-success focus:border-success focus:ring-1 focus:ring-success shadow-inner outline-none mx-auto block transition-all"
                                 placeholder="0"
                               />
@@ -356,10 +365,10 @@ export function Settlement() {
                 <div className="p-8 text-center text-sm font-medium text-on-surface-variant">Loading data...</div>
              ) : (
                 filteredWorkers.map(w => {
-                  const grossSalary = w.dailyRate * (w.attendance_days || 0);
+                  const grossSalary = w.daily_rate * (w.attendance_days || 0);
                   const totalDeductions = (w.ration || 0) + (w.pocket_money || 0) + (w.other_deduction || 0);
                   const netSalary = grossSalary - totalDeductions;
-                  const closingDue = netSalary - (w.payments_made || 0);
+                  const closingDue = netSalary - (w.total_payments || 0);
               
                   return (
                     <div key={w.id} className="bg-surface-bright border border-outline-variant rounded-xl p-4 shadow-sm flex flex-col gap-4 relative overflow-hidden">
@@ -392,8 +401,8 @@ export function Settlement() {
                           <label className="block text-[10px] text-on-surface-variant uppercase font-bold mb-1.5">Daily Rate</label>
                           <input 
                             type="number" 
-                            value={w.dailyRate}
-                            onChange={(e) => handleUpdate(w.id, 'dailyRate', parseFloat(e.target.value) || 0)}
+                            value={w.daily_rate}
+                            onChange={(e) => handleUpdate(w.id, 'daily_rate', parseFloat(e.target.value) || 0)}
                             className="w-full bg-surface-bright border border-outline-variant/30 p-2 rounded-md text-sm font-bold outline-none focus:border-on-surface focus:ring-1 focus:ring-on-surface shadow-sm"
                           />
                         </div>
@@ -420,7 +429,7 @@ export function Settlement() {
                       <div className="flex gap-3 items-end">
                          <div className="bg-success/5 p-2.5 rounded-lg border border-success/10 flex-1">
                            <label className="block text-[10px] text-success uppercase font-bold mb-1.5">Payments Made</label>
-                           <input type="number" placeholder="0" value={w.payments_made || ''} onChange={(e) => handleUpdate(w.id, 'payments_made', parseFloat(e.target.value) || 0)} className="w-full bg-surface-bright border border-success/20 p-2 rounded-md text-sm font-bold text-success outline-none focus:border-success focus:ring-1 focus:ring-success shadow-sm" />
+                           <input type="number" placeholder="0" value={w.total_payments || ''} onChange={(e) => handleUpdate(w.id, 'total_payments', parseFloat(e.target.value) || 0)} className="w-full bg-surface-bright border border-success/20 p-2 rounded-md text-sm font-bold text-success outline-none focus:border-success focus:ring-1 focus:ring-success shadow-sm" />
                          </div>
                          
                          <div className="text-right p-2 border-l border-outline-variant/30 pl-3">
