@@ -31,7 +31,7 @@ export function Reports() {
       const currentMonthDateStr = `${year}-${month}-01`;
 
       // Get basic stats
-      const laboursRes = await supabase.from('labour').select('*, site(*)').eq('is_archived', false).order('id', { ascending: false });
+      const laboursRes = await supabase.from('labour').select('*, site!site_id(*)').eq('is_archived', false).order('id', { ascending: false });
       if (laboursRes.error) throw laboursRes.error;
       const activeLaboursDataRes = await supabase.from('labour').select('id, site_id').eq('is_archived', false);
       const attendanceRes = await supabase.from('attendance').select('*');
@@ -65,9 +65,9 @@ export function Reports() {
         });
 
         if (currentEntry) {
-          ration += Number(currentEntry.ration || 0);
-          pocketMoney += Number(currentEntry.pocket_money || 0);
-          otherDeductions += Number(currentEntry.other_deduction || 0);
+          ration += Number(currentEntry.ration_amount || 0);
+          pocketMoney += Number(currentEntry.pocket_money_amount || 0);
+          otherDeductions += Number(currentEntry.other_deduction_amount || 0);
         }
 
         // Previous due
