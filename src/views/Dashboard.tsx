@@ -1,8 +1,10 @@
 import { useState, useEffect } from 'react';
 import { AlertCircle, History } from 'lucide-react';
 import { supabase } from '../lib/supabase';
+import { useLanguage } from '../lib/LanguageContext';
 
 export function Dashboard() {
+  const { t } = useLanguage();
   const [data, setData] = useState({
     totalLabours: 0,
     currentPayroll: 0,
@@ -155,15 +157,15 @@ export function Dashboard() {
         </h2>
         <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
           <div className="bg-surface-container-low/50 border border-outline-variant/50 rounded-md p-3 flex flex-col justify-between border-l-4 border-l-secondary">
-            <span className="text-[10px] font-bold text-on-surface-variant uppercase tracking-wide">Current Payroll</span>
+            <span className="text-[10px] font-bold text-on-surface-variant uppercase tracking-wide">{t('Current Payroll')}</span>
             <span className="text-xl font-extrabold text-on-surface tracking-tight mt-1">₹{data.currentPayroll.toLocaleString()}</span>
           </div>
           <div className="bg-error/5 border border-error/20 rounded-md p-3 flex flex-col justify-between border-l-4 border-l-error">
-            <span className="text-[10px] font-bold text-error uppercase tracking-wide">Pending Dues</span>
+            <span className="text-[10px] font-bold text-error uppercase tracking-wide">{t('Pending Due')}</span>
             <span className="text-xl font-bold text-error mt-1">₹{data.pendingDues.toLocaleString()}</span>
           </div>
           <div className="bg-primary/5 border border-primary/20 rounded-md p-3 flex flex-col justify-between border-l-4 border-l-primary">
-            <span className="text-[10px] font-bold text-primary uppercase tracking-wide">Total Labour</span>
+            <span className="text-[10px] font-bold text-primary uppercase tracking-wide">{t('Total Labour')}</span>
             <span className="text-xl font-bold text-on-surface mt-1">{data.totalLabours}</span>
           </div>
           <div className="bg-success/5 border border-success/20 rounded-md p-3 flex flex-col justify-between border-l-4 border-l-success">
@@ -190,9 +192,9 @@ export function Dashboard() {
                     <thead className="bg-surface-container-low/50 border-b border-outline-variant text-[10px] uppercase sticky top-0 z-10">
                       <tr>
                         <th className="p-3 font-semibold text-on-surface-variant border-r border-outline-variant/30">Site Name</th>
-                        <th className="p-3 font-semibold text-on-surface-variant text-center border-r border-outline-variant/30">Labour</th>
-                        <th className="p-3 font-semibold text-on-surface-variant text-right border-r border-outline-variant/30">Payroll</th>
-                        <th className="p-3 font-semibold text-on-surface-variant text-right">Pending Due</th>
+                        <th className="p-3 font-semibold text-on-surface-variant text-center border-r border-outline-variant/30">{t('Labours')}</th>
+                        <th className="p-3 font-semibold text-on-surface-variant text-right border-r border-outline-variant/30">{t('Payroll')}</th>
+                        <th className="p-3 font-semibold text-on-surface-variant text-right">{t('Pending Due')}</th>
                       </tr>
                     </thead>
                     <tbody className="divide-y divide-outline-variant/60 text-sm">
@@ -217,7 +219,7 @@ export function Dashboard() {
           <section className="bg-surface-bright rounded-lg shadow-sm border border-outline-variant flex flex-col flex-1 shrink-0 min-h-0">
             <div className="p-4 border-b border-error/20 flex-shrink-0 bg-error/5">
               <h3 className="text-sm font-bold text-error flex items-center gap-1.5 uppercase tracking-wide">
-                <AlertCircle className="w-4 h-4" /> High Priority: Pending Dues 
+                <AlertCircle className="w-4 h-4" /> High Priority: {t('Pending Due')} 
               </h3>
             </div>
              <div className="overflow-y-auto">

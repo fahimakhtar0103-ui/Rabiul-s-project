@@ -1,7 +1,8 @@
 import { useState } from 'react';
-import { Bell, ArrowLeft, CheckCircle2, LogOut } from 'lucide-react';
+import { Bell, ArrowLeft, CheckCircle2, LogOut, Settings as SettingsIcon } from 'lucide-react';
 import { ViewState } from '../types';
 import { supabase } from '../lib/supabase';
+import { useLanguage } from '../lib/LanguageContext';
 
 interface HeaderProps {
   currentView: ViewState;
@@ -9,8 +10,9 @@ interface HeaderProps {
 }
 
 export function Header({ currentView, onNavigate }: Readonly<HeaderProps>) {
-  const isInternal = currentView === 'payment' || currentView === 'profile';
+  const isInternal = currentView === 'payment' || currentView === 'profile' || currentView === 'settings';
   const [showNotifications, setShowNotifications] = useState(false);
+  const { language, setLanguage, t } = useLanguage();
 
   return (
     <header className="flex justify-between items-center px-4 h-16 w-full z-50 bg-surface-bright border-b border-outline-variant sticky top-0 left-0 shadow-[0_2px_10px_rgba(0,0,0,0.02)] print:hidden">
@@ -18,13 +20,13 @@ export function Header({ currentView, onNavigate }: Readonly<HeaderProps>) {
         {isInternal ? (
           <>
             <button
-              onClick={() => onNavigate('labours')}
+              onClick={() => onNavigate('dashboard')}
               className="w-10 h-10 flex items-center justify-center rounded-full hover:bg-surface-container-low active:bg-surface-container transition-colors -ml-2"
             >
               <ArrowLeft className="text-on-surface w-6 h-6" />
             </button>
             <h1 className="text-xl font-bold text-on-surface tracking-tight truncate">
-              {currentView === 'profile' ? 'Profile Summary' : 'Payment Entry'}
+              {currentView === 'profile' ? t('Profile') : currentView === 'settings' ? t('Settings') : t('Payment')}
             </h1>
           </>
         ) : (
@@ -42,6 +44,27 @@ export function Header({ currentView, onNavigate }: Readonly<HeaderProps>) {
       
       {/* Right Actions */}
       <div className="flex items-center gap-2 relative">
+        <div className="flex items-center bg-surface-container-low rounded-full p-1 mr-2 border border-outline-variant/30">
+          <button 
+            onClick={() => setLanguage('en')}
+            className={`px-2 py-1 text-[10px] font-bold rounded-full transition-colors ${language === 'en' ? 'bg-primary text-white' : 'text-on-surface-variant hover:text-primary'}`}
+          >
+            English
+          </button>
+          <button 
+            onClick={() => setLanguage('hi')}
+            className={`px-2 py-1 text-[10px] font-bold rounded-full transition-colors ${language === 'hi' ? 'bg-primary text-white' : 'text-on-surface-variant hover:text-primary'}`}
+          >
+            हिन्दी
+          </button>
+        </div>
+        <button 
+          onClick={() => onNavigate('settings')}
+          className="w-10 h-10 flex items-center justify-center text-on-surface-variant hover:text-primary hover:bg-primary/5 transition-colors rounded-full"
+          title="Settings"
+        >
+          <SettingsIcon className="w-5 h-5" />
+        </button>
         <button 
           onClick={() => setShowNotifications(!showNotifications)}
           className="w-10 h-10 flex items-center justify-center text-on-surface-variant hover:text-primary hover:bg-primary/5 transition-colors rounded-full relative"

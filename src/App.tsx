@@ -12,6 +12,7 @@ import { Payment } from './views/Payment';
 import { Profile } from './views/Profile';
 import { Reports } from './views/Reports';
 import { SiteManagement } from './views/SiteManagement';
+import { Settings } from './views/Settings';
 import { SplashScreen } from './components/SplashScreen';
 import { Login } from './views/Login';
 
@@ -94,10 +95,11 @@ export default function App() {
               <Reports />
             )}
             {currentView === 'sites' && <SiteManagement />}
+            {currentView === 'settings' && <Settings />}
           </main>
 
           {/* Hide bottom nav on internal deeply nested pages like payment or profile to focus task */}
-          {(currentView !== 'payment' && currentView !== 'profile') && (
+          {(currentView !== 'payment' && currentView !== 'profile' && currentView !== 'settings') && (
             <BottomNav currentView={currentView} onNavigate={handleNavigate} />
           )}
         </div>

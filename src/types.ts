@@ -1,4 +1,4 @@
-export type ViewState = 'dashboard' | 'settlement' | 'labours' | 'payment' | 'profile' | 'sites' | 'reports';
+export type ViewState = 'dashboard' | 'settlement' | 'labours' | 'payment' | 'profile' | 'sites' | 'reports' | 'settings';
 
 export interface Labour {
   id: number;

@@ -2,8 +2,10 @@ import { useState, useEffect } from 'react';
 import { Search, Save, Download, FileSpreadsheet, AlertTriangle, CheckCircle2 } from 'lucide-react';
 import { supabase } from '../lib/supabase';
 import * as XLSX from 'xlsx';
+import { useLanguage } from '../lib/LanguageContext';
 
 export function Settlement() {
+  const { t } = useLanguage();
   const [workers, setWorkers] = useState<any[]>([]);
   const [searchQuery, setSearchQuery] = useState('');
   
@@ -249,14 +251,14 @@ export function Settlement() {
                    <thead className="bg-surface-container-low border-b-2 border-outline-variant text-[10px] uppercase">
                     <tr>
                       <th className="p-3 font-semibold text-on-surface-variant border-r border-outline-variant/50 sticky left-0 bg-surface-container-low z-20 shadow-[2px_0_5px_rgba(0,0,0,0.02)] min-w-[160px]">Labour Details</th>
-                      <th className="p-3 font-semibold text-primary border-r border-outline-variant/50 text-center w-28 bg-primary/5">Att. Days</th>
-                      <th className="p-3 font-semibold text-on-surface-variant border-r border-outline-variant/50 text-right w-24">Daily Rate</th>
-                      <th className="p-3 font-semibold text-on-surface-variant border-r border-outline-variant/50 text-right w-24 bg-surface-container-low/50">Gross Salary</th>
+                      <th className="p-3 font-semibold text-primary border-r border-outline-variant/50 text-center w-28 bg-primary/5">{t('Attendance Days')}</th>
+                      <th className="p-3 font-semibold text-on-surface-variant border-r border-outline-variant/50 text-right w-24">{t('Daily Rate')}</th>
+                      <th className="p-3 font-semibold text-on-surface-variant border-r border-outline-variant/50 text-right w-24 bg-surface-container-low/50">{t('Gross Salary')}</th>
                       <th className="p-3 font-semibold text-error border-r border-outline-variant/50 text-center w-56 bg-error/5">
-                        Deductions<br/><span className="lowercase text-[9px] font-medium tracking-normal">(Ration, Pocket, Other)</span>
+                        Deductions<br/><span className="lowercase text-[9px] font-medium tracking-normal">({t('Ration')}, {t('Pocket Money')}, Other)</span>
                       </th>
                       <th className="p-3 font-semibold border-r border-outline-variant/50 text-right w-24">Net Salary</th>
-                      <th className="p-3 font-semibold text-success border-r border-outline-variant/50 text-center w-32 bg-success/5">Payments</th>
+                      <th className="p-3 font-semibold text-success border-r border-outline-variant/50 text-center w-32 bg-success/5">{t('Payments')}</th>
                       <th className="p-3 font-bold text-inverse-surface bg-inverse-surface/5 text-right w-28">Closing Due</th>
                     </tr>
                   </thead>
@@ -387,7 +389,7 @@ export function Settlement() {
                       
                       <div className="grid grid-cols-2 gap-3">
                         <div className="bg-primary/5 p-2.5 rounded-lg border border-primary/10">
-                          <label className="block text-[10px] text-primary uppercase font-bold mb-1.5">Att. Days</label>
+                          <label className="block text-[10px] text-primary uppercase font-bold mb-1.5">{t('Attendance Days')}</label>
                           <input 
                             type="number" 
                             value={w.attendance_days === 0 && !w._touched ? '' : w.attendance_days}
@@ -398,7 +400,7 @@ export function Settlement() {
                           />
                         </div>
                         <div className="bg-surface-container-low p-2.5 rounded-lg border border-outline-variant/50">
-                          <label className="block text-[10px] text-on-surface-variant uppercase font-bold mb-1.5">Daily Rate</label>
+                          <label className="block text-[10px] text-on-surface-variant uppercase font-bold mb-1.5">{t('Daily Rate')}</label>
                           <input 
                             type="number" 
                             value={w.daily_rate}
@@ -410,29 +412,29 @@ export function Settlement() {
               
                       <div className="bg-error/5 p-3 rounded-lg border border-error/10">
                          <label className="block text-[10px] text-error uppercase font-bold mb-2">Deductions</label>
-                         <div className="grid grid-cols-3 gap-2">
-                           <div>
-                             <input type="number" placeholder="0" value={w.ration || ''} onChange={(e) => handleUpdate(w.id, 'ration', parseFloat(e.target.value) || 0)} className="w-full text-center bg-surface-bright border border-error/20 p-2 rounded-md text-xs font-bold text-error outline-none focus:border-error focus:ring-1 focus:ring-error shadow-sm" />
-                             <span className="block text-[9px] text-error font-medium uppercase mt-1.5 text-center">Ration</span>
+                         <div className="grid grid-cols-1 sm:grid-cols-3 gap-2">
+                           <div className="flex items-center gap-2 sm:block sm:gap-0">
+                             <span className="w-16 sm:w-auto text-[10px] text-error font-medium uppercase sm:mt-1.5 sm:text-center block">{t('Ration')}</span>
+                             <input type="number" placeholder="0" value={w.ration || ''} onChange={(e) => handleUpdate(w.id, 'ration', parseFloat(e.target.value) || 0)} className="flex-1 sm:w-full text-right sm:text-center bg-surface-bright border border-error/20 p-2 rounded-md text-xs font-bold text-error outline-none focus:border-error focus:ring-1 focus:ring-error shadow-sm" />
                            </div>
-                           <div>
-                             <input type="number" placeholder="0" value={w.pocket_money || ''} onChange={(e) => handleUpdate(w.id, 'pocket_money', parseFloat(e.target.value) || 0)} className="w-full text-center bg-surface-bright border border-error/20 p-2 rounded-md text-xs font-bold text-error outline-none focus:border-error focus:ring-1 focus:ring-error shadow-sm" />
-                             <span className="block text-[9px] text-error font-medium uppercase mt-1.5 text-center">Pocket</span>
+                           <div className="flex items-center gap-2 sm:block sm:gap-0">
+                             <span className="w-16 sm:w-auto text-[10px] text-error font-medium uppercase sm:mt-1.5 sm:text-center block">{t('Pocket Money')}</span>
+                             <input type="number" placeholder="0" value={w.pocket_money || ''} onChange={(e) => handleUpdate(w.id, 'pocket_money', parseFloat(e.target.value) || 0)} className="flex-1 sm:w-full text-right sm:text-center bg-surface-bright border border-error/20 p-2 rounded-md text-xs font-bold text-error outline-none focus:border-error focus:ring-1 focus:ring-error shadow-sm" />
                            </div>
-                           <div>
-                             <input type="number" placeholder="0" value={w.other_deduction || ''} onChange={(e) => handleUpdate(w.id, 'other_deduction', parseFloat(e.target.value) || 0)} className="w-full text-center bg-surface-bright border border-error/20 p-2 rounded-md text-xs font-bold text-error outline-none focus:border-error focus:ring-1 focus:ring-error shadow-sm" />
-                             <span className="block text-[9px] text-error font-medium uppercase mt-1.5 text-center">Other</span>
+                           <div className="flex items-center gap-2 sm:block sm:gap-0">
+                             <span className="w-16 sm:w-auto text-[10px] text-error font-medium uppercase sm:mt-1.5 sm:text-center block">Other</span>
+                             <input type="number" placeholder="0" value={w.other_deduction || ''} onChange={(e) => handleUpdate(w.id, 'other_deduction', parseFloat(e.target.value) || 0)} className="flex-1 sm:w-full text-right sm:text-center bg-surface-bright border border-error/20 p-2 rounded-md text-xs font-bold text-error outline-none focus:border-error focus:ring-1 focus:ring-error shadow-sm" />
                            </div>
                          </div>
                       </div>
               
-                      <div className="flex gap-3 items-end">
-                         <div className="bg-success/5 p-2.5 rounded-lg border border-success/10 flex-1">
-                           <label className="block text-[10px] text-success uppercase font-bold mb-1.5">Payments Made</label>
+                      <div className="flex flex-col sm:flex-row gap-3 items-start sm:items-end">
+                         <div className="bg-success/5 p-2.5 rounded-lg border border-success/10 w-full sm:flex-1">
+                           <label className="block text-[10px] text-success uppercase font-bold mb-1.5">{t('Payments')}</label>
                            <input type="number" placeholder="0" value={w.total_payments || ''} onChange={(e) => handleUpdate(w.id, 'total_payments', parseFloat(e.target.value) || 0)} className="w-full bg-surface-bright border border-success/20 p-2 rounded-md text-sm font-bold text-success outline-none focus:border-success focus:ring-1 focus:ring-success shadow-sm" />
                          </div>
                          
-                         <div className="text-right p-2 border-l border-outline-variant/30 pl-3">
+                         <div className="text-left sm:text-right p-2 sm:border-l border-outline-variant/30 sm:pl-3 w-full sm:w-auto bg-surface-container-low rounded-lg sm:bg-transparent sm:rounded-none">
                            <p className="text-[10px] text-on-surface-variant font-bold uppercase tracking-wider mb-1">Net Salary</p>
                            <p className="text-lg font-black text-on-surface leading-none">₹{netSalary.toLocaleString()}</p>
                            <p className="text-[10px] text-on-surface-variant mt-1">Gross: ₹{grossSalary.toLocaleString()}</p>

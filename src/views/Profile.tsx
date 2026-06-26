@@ -5,6 +5,7 @@ import { supabase } from '../lib/supabase';
 import jsPDF from 'jspdf';
 import autoTable from 'jspdf-autotable';
 import * as XLSX from 'xlsx';
+import { useLanguage } from '../lib/LanguageContext';
 
 interface ProfileProps {
   worker: any; // We receive basic worker from navigate
@@ -12,6 +13,7 @@ interface ProfileProps {
 }
 
 export function Profile({ worker, onNavigate }: Readonly<ProfileProps>) {
+  const { t } = useLanguage();
   const [data, setData] = useState<LabourProfileData | null>(null);
   const [activeTab, setActiveTab] = useState<'overview' | 'attendance' | 'payments' | 'deductions' | 'history'>('overview');
   
@@ -325,13 +327,18 @@ export function Profile({ worker, onNavigate }: Readonly<ProfileProps>) {
       </div>
 
       <div className="grid grid-cols-4 sm:flex bg-surface-container-low rounded-lg p-1 border border-outline-variant print:hidden gap-1">
-        {['overview', 'payments', 'deductions', 'history'].map(tab => (
+        {[
+          { id: 'overview', label: 'Dashboard' },
+          { id: 'payments', label: 'Payments' },
+          { id: 'deductions', label: 'Total Deductions' },
+          { id: 'history', label: 'Payroll' }
+        ].map(tab => (
           <button 
-            key={tab}
-            onClick={() => setActiveTab(tab as any)}
-            className={`w-full sm:flex-1 text-center text-[10px] sm:text-xs font-bold py-2 px-1 sm:px-3 rounded-md uppercase tracking-wide ${activeTab === tab ? 'bg-primary text-white shadow-sm' : 'text-on-surface-variant hover:bg-surface-bright transition-colors'}`}
+            key={tab.id}
+            onClick={() => setActiveTab(tab.id as any)}
+            className={`w-full sm:flex-1 text-center text-[10px] sm:text-xs font-bold py-2 px-1 sm:px-3 rounded-md uppercase tracking-wide ${activeTab === tab.id ? 'bg-primary text-white shadow-sm' : 'text-on-surface-variant hover:bg-surface-bright transition-colors'}`}
           >
-            {tab}
+            {t(tab.label)}
           </button>
         ))}
       </div>

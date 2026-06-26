@@ -6,6 +6,7 @@ import {
   BarChart3,
 } from 'lucide-react';
 import { ViewState } from '../types';
+import { useLanguage } from '../lib/LanguageContext';
 
 interface BottomNavProps {
   currentView: ViewState;
@@ -13,6 +14,8 @@ interface BottomNavProps {
 }
 
 export function BottomNav({ currentView, onNavigate }: Readonly<BottomNavProps>) {
+  const { t } = useLanguage();
+
   const items = [
     { id: 'dashboard', icon: LayoutDashboard, label: 'Dashboard' },
     { id: 'settlement', icon: ClipboardList, label: 'Settlement' },
@@ -40,7 +43,7 @@ export function BottomNav({ currentView, onNavigate }: Readonly<BottomNavProps>)
               <Icon className={`w-5 h-5 ${isActive ? 'stroke-[2.5px]' : 'stroke-2'}`} />
             </div>
             <span className={`text-[10px] uppercase tracking-wider leading-none ${isActive ? 'font-bold' : 'font-semibold'}`}>
-              {item.label}
+              {t(item.label)}
             </span>
           </button>
         );
