@@ -55,10 +55,26 @@ export function Dashboard() {
       const { data: sites } = await supabase.from('site').select('*');
       
       // 2. Fetch payments, deductions, attendance for calculating dues
-      const { data: payments } = await supabase.from('payment').select('*');
-      const { data: deductions } = await supabase.from('deduction').select('*');
-      const { data: attendance } = await supabase.from('attendance').select('*');
+      const { data: rawPayments } = await supabase.from('payment').select('*');
+      const { data: rawDeductions } = await supabase.from('deduction').select('*');
+      const { data: rawAttendance } = await supabase.from('attendance').select('*');
       const { data: monthly_settlement } = await supabase.from('monthly_settlement').select('*');
+
+      const payments = (rawPayments || []).map((p: any) => ({
+        ...p,
+        labour_id: p.labourId || p.labour_id,
+        payment_date: p.point_date || p.payment_date
+      }));
+
+      const deductions = (rawDeductions || []).map((d: any) => ({
+        ...d,
+        labour_id: d.labourId || d.labour_id
+      }));
+
+      const attendance = (rawAttendance || []).map((a: any) => ({
+        ...a,
+        labour_id: a.labourId || a.labour_id
+      }));
 
       // Process Stats
       let currentPayroll = 0;

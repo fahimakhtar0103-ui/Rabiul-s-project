@@ -57,9 +57,9 @@ export function Profile({ worker, onNavigate }: Readonly<ProfileProps>) {
         labourData = labourRes.data;
       }
 
-      const attendanceRes = await supabase.from('attendance').select('*').eq('labour_id', worker.id).order('year', { ascending: false }).order('month', { ascending: false });
-      const paymentRes = await supabase.from('payment').select('*').eq('labour_id', worker.id).order('payment_date', { ascending: false });
-      const deductionRes = await supabase.from('deduction').select('*').eq('labour_id', worker.id).order('year', { ascending: false }).order('month', { ascending: false });
+      const attendanceRes = await supabase.from('attendance').select('*').eq('labourId', worker.id).order('year', { ascending: false }).order('month', { ascending: false });
+      const paymentRes = await supabase.from('payment').select('*').eq('labourId', worker.id).order('point_date', { ascending: false });
+      const deductionRes = await supabase.from('deduction').select('*').eq('labourId', worker.id).order('year', { ascending: false }).order('month', { ascending: false });
       
       let monthly_settlementRes: any = { data: [] };
       try {
@@ -73,11 +73,28 @@ export function Profile({ worker, onNavigate }: Readonly<ProfileProps>) {
           ...labourData,
           site_name: labourData.site ? labourData.site.name : null
         };
+
+        const mappedAttendance = (attendanceRes.data || []).map(a => ({
+          ...a,
+          labour_id: a.labourId || a.labour_id
+        }));
+
+        const mappedPayments = (paymentRes.data || []).map(p => ({
+          ...p,
+          labour_id: p.labourId || p.labour_id,
+          payment_date: p.point_date || p.payment_date
+        }));
+
+        const mappedDeductions = (deductionRes.data || []).map(d => ({
+          ...d,
+          labour_id: d.labourId || d.labour_id
+        }));
+
         setData({
           labour: labourWithSite,
-          attendance: attendanceRes.data || [],
-          payments: paymentRes.data || [],
-          deductions: deductionRes.data || [],
+          attendance: mappedAttendance,
+          payments: mappedPayments,
+          deductions: mappedDeductions,
           monthly_settlement: monthly_settlementRes.data || []
         });
       }
@@ -188,7 +205,7 @@ export function Profile({ worker, onNavigate }: Readonly<ProfileProps>) {
     setFeedback({ message: '', type: null });
     try {
       // Upsert: First check if it exists
-      const existing = await supabase.from('attendance').select('id').eq('labour_id', labour.id).eq('year', parseInt(selectedYearStr)).eq('month', selectedMonthStr).single();
+      const existing = await supabase.from('attendance').select('id').eq('labourId', labour.id).eq('year', parseInt(selectedYearStr)).eq('month', selectedMonthStr).single();
       
       let error;
       if (existing.data) {
@@ -196,7 +213,7 @@ export function Profile({ worker, onNavigate }: Readonly<ProfileProps>) {
         error = res.error;
       } else {
         const res = await supabase.from('attendance').insert([{ 
-          labour_id: labour.id, 
+          labourId: labour.id, 
           year: parseInt(selectedYearStr), 
           month: selectedMonthStr, 
           attendance_days: parseFloat(attendanceForm.attendance_days) 
@@ -222,8 +239,8 @@ export function Profile({ worker, onNavigate }: Readonly<ProfileProps>) {
     setFeedback({ message: '', type: null });
     try {
       const payload = {
-        labour_id: labour.id,
-        payment_date: paymentForm.date,
+        labourId: labour.id,
+        point_date: paymentForm.date,
         amount: parseFloat(paymentForm.amount),
         mode: paymentForm.mode,
         notes: paymentForm.notes
@@ -251,10 +268,10 @@ export function Profile({ worker, onNavigate }: Readonly<ProfileProps>) {
     setFeedback({ message: '', type: null });
     try {
       // Upsert based on month and year
-      const existing = await supabase.from('deduction').select('id').eq('labour_id', labour.id).eq('year', parseInt(selectedYearStr)).eq('month', parseInt(selectedMonthStr)).single();
+      const existing = await supabase.from('deduction').select('id').eq('labourId', labour.id).eq('year', parseInt(selectedYearStr)).eq('month', parseInt(selectedMonthStr)).single();
 
       const payload = {
-        labour_id: labour.id,
+        labourId: labour.id,
         year: parseInt(selectedYearStr),
         month: parseInt(selectedMonthStr),
         ration_amount: parseFloat(deductionForm.ration_amount) || 0,

@@ -38,6 +38,22 @@ export function Reports() {
       const paymentRes = await supabase.from('payment').select('*');
       const deductionRes = await supabase.from('deduction').select('*');
       const sitesRes = await supabase.from('site').select('*');
+
+      const attendanceData = (attendanceRes.data || []).map((a: any) => ({
+        ...a,
+        labour_id: a.labourId || a.labour_id
+      }));
+
+      const paymentData = (paymentRes.data || []).map((p: any) => ({
+        ...p,
+        labour_id: p.labourId || p.labour_id,
+        payment_date: p.point_date || p.payment_date
+      }));
+
+      const deductionData = (deductionRes.data || []).map((d: any) => ({
+        ...d,
+        labour_id: d.labourId || d.labour_id
+      }));
       
       let monthly_settlementRes: any = { data: [] };
       try { monthly_settlementRes = await supabase.from('monthly_settlement').select('*'); } catch(e) {}
@@ -48,12 +64,12 @@ export function Reports() {
       // Calculate table data
       const workers = labours.map((labour: any) => {
         // Current month
-        const currentAttendance = (attendanceRes.data || []).find(a => a.labour_id === labour.id && a.year === year && a.month.toString().padStart(2, '0') === month);
+        const currentAttendance = attendanceData.find(a => a.labour_id === labour.id && a.year === year && a.month.toString().padStart(2, '0') === month);
         const currentEntry = (monthly_settlementRes.data || []).find((m: any) => m.labour_id === labour.id && m.year === year && m.month === parseInt(month));
         const currentDays = (currentAttendance ? Number(currentAttendance.attendance_days) : 0) + (currentEntry ? Number(currentEntry.attendance_days || 0) : 0);
         
-        const currentPayments = (paymentRes.data || []).filter(p => p.labour_id === labour.id && p.payment_date.toString().startsWith(selectedMonth));
-        const currentDeductions = (deductionRes.data || []).filter(d => d.labour_id === labour.id && d.year === year && d.month.toString().padStart(2, '0') === month);
+        const currentPayments = paymentData.filter(p => p.labour_id === labour.id && p.payment_date.toString().startsWith(selectedMonth));
+        const currentDeductions = deductionData.filter(d => d.labour_id === labour.id && d.year === year && d.month.toString().padStart(2, '0') === month);
 
         const paymentsMade = currentPayments.reduce((sum, p) => sum + Number(p.amount), 0) + (currentEntry ? Number(currentEntry.total_payments || 0) : 0);
         
@@ -71,12 +87,12 @@ export function Reports() {
         }
 
         // Previous due
-        const prevAttendance = (attendanceRes.data || []).filter(a => {
+        const prevAttendance = attendanceData.filter(a => {
           const aDate = `${a.year}-${a.month.toString().padStart(2, '0')}-01`;
           return aDate < currentMonthDateStr;
         });
-        const prevPayments = (paymentRes.data || []).filter(p => p.payment_date.toString() < currentMonthDateStr && p.labour_id === labour.id);
-        const prevDeductions = (deductionRes.data || []).filter(d => {
+        const prevPayments = paymentData.filter(p => p.payment_date.toString() < currentMonthDateStr && p.labour_id === labour.id);
+        const prevDeductions = deductionData.filter(d => {
           const dDate = `${d.year}-${d.month.toString().padStart(2, '0')}-01`;
           return dDate < currentMonthDateStr && d.labour_id === labour.id;
         });
@@ -121,11 +137,11 @@ export function Reports() {
 
       setTableData(workers);
       
-      const manualActive = (attendanceRes.data || []).filter(a => a.year.toString() === year.toString() && a.month.toString().padStart(2, '0') === month && Number(a.attendance_days) > 0).map(a => a.labour_id);
+      const manualActive = attendanceData.filter(a => a.year.toString() === year.toString() && a.month.toString().padStart(2, '0') === month && Number(a.attendance_days) > 0).map(a => a.labour_id);
       const entryActive = (monthly_settlementRes.data || []).filter((m: any) => m.year === year && m.month === parseInt(month) && Number(m.attendance_days) > 0).map((m: any) => m.labour_id);
       const activeLabours = new Set([...manualActive, ...entryActive]).size;
 
-      const currentPaymentsRes = await supabase.from('payment').select('amount').like('payment_date', `${selectedMonth}%`);
+      const currentPaymentsRes = await supabase.from('payment').select('amount').like('point_date', `${selectedMonth}%`);
       const totalPayments = (currentPaymentsRes.data || []).reduce((sum, p) => sum + Number(p.amount), 0) + 
             (monthly_settlementRes.data || []).filter((m: any) => m.year === year && m.month === parseInt(month)).reduce((sum: number, m: any) => sum + Number(m.total_payments || 0), 0);
 
@@ -278,10 +294,16 @@ export function Reports() {
       if (lRes.error) throw lRes.error;
       
       const labourMap = new Map(lRes.data.map(l => [l.id, l]));
-      payments = (pRes.data || []).map(p => ({
-        ...p,
-        labour: labourMap.get(p.labour_id) || null
-      }));
+      payments = (pRes.data || []).map(p => {
+        const actualLabourId = p.labourId || p.labour_id;
+        const actualPaymentDate = p.point_date || p.payment_date;
+        return {
+          ...p,
+          labour_id: actualLabourId,
+          payment_date: actualPaymentDate,
+          labour: labourMap.get(actualLabourId) || null
+        };
+      });
     } else {
       payments = paymentsRes.data || [];
     }

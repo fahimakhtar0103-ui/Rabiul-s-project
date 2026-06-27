@@ -146,9 +146,9 @@ export function LabourList({ onNavigate }: Readonly<LabourListProps>) {
         const { error } = await supabase.from('labour').update({ is_archived: false }).eq('id', activeModal.id);
         if (!error) fetchLabours();
       } else if (activeModal.type === 'delete') {
-        await supabase.from('payment').delete().eq('labour_id', activeModal.id);
-        await supabase.from('attendance').delete().eq('labour_id', activeModal.id);
-        await supabase.from('deduction').delete().eq('labour_id', activeModal.id);
+        await supabase.from('payment').delete().eq('labourId', activeModal.id);
+        await supabase.from('attendance').delete().eq('labourId', activeModal.id);
+        await supabase.from('deduction').delete().eq('labourId', activeModal.id);
         await supabase.from('monthly_settlement').delete().eq('labour_id', activeModal.id);
         const { error } = await supabase.from('labour').delete().eq('id', activeModal.id);
         if (!error) fetchLabours();
