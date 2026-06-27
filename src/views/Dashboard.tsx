@@ -33,7 +33,25 @@ export function Dashboard() {
       const currentYear = today.getFullYear();
       const currentMonthInt = today.getMonth() + 1;
       
-      const { data: labours } = await supabase.from('labour').select('*, site!site_id(name)').eq('is_archived', false);
+      let labours: any[] = [];
+      const laboursRes = await supabase.from('labour').select('*, site!site_id(name)').eq('is_archived', false);
+      if (laboursRes.error) {
+        // Fallback: fetch labour and then fetch site separately and link in memory
+        const lRes = await supabase.from('labour').select('*').eq('is_archived', false);
+        const sRes = await supabase.from('site').select('id, name');
+        if (!lRes.error && !sRes.error) {
+          const siteNameMap = new Map(sRes.data.map(s => [s.id, s.name]));
+          labours = (lRes.data || []).map(l => ({
+            ...l,
+            site: l.site_id ? { name: siteNameMap.get(l.site_id) } : null
+          }));
+        } else {
+          console.error("Dashboard fallback error:", lRes.error, sRes.error);
+        }
+      } else {
+        labours = laboursRes.data || [];
+      }
+      
       const { data: sites } = await supabase.from('site').select('*');
       
       // 2. Fetch payments, deductions, attendance for calculating dues

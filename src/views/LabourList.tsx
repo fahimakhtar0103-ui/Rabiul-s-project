@@ -32,15 +32,31 @@ export function LabourList({ onNavigate }: Readonly<LabourListProps>) {
 
   const fetchLabours = async () => {
     try {
-      const { data, error } = await supabase
+      let rawData: any[] = [];
+      const res = await supabase
         .from('labour')
         .select('*, site!site_id(*)')
         .eq('is_archived', showArchived)
         .order('id', { ascending: false });
         
-      if (error) throw error;
+      if (res.error) {
+        // Fallback: Fetch labour and sites separately, and map in memory
+        const lRes = await supabase.from('labour').select('*').eq('is_archived', showArchived).order('id', { ascending: false });
+        const sRes = await supabase.from('site').select('*');
+        if (!lRes.error) {
+          const siteMap = new Map(sRes.data?.map(s => [s.id, s]) || []);
+          rawData = (lRes.data || []).map(l => ({
+            ...l,
+            site: l.site_id ? siteMap.get(l.site_id) : null
+          }));
+        } else {
+          throw lRes.error;
+        }
+      } else {
+        rawData = res.data || [];
+      }
       
-      const formatted = (data || []).map((l: any) => ({
+      const formatted = rawData.map((l: any) => ({
         ...l,
         site_name: l.site ? l.site.name : null
       }));

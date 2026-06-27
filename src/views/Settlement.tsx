@@ -27,14 +27,26 @@ export function Settlement() {
     setSaveStatus({ saving: false, message: '', type: null });
     
     try {
+      let labours: any[] = [];
       const laboursRes = await supabase.from('labour').select('*, site!site_id(*)').eq('is_archived', false).order('id', { ascending: false });
       if (laboursRes.error) {
-        console.error("Labour fetch error:", laboursRes.error);
-        setSaveStatus({ saving: false, message: "Error fetching labours: " + laboursRes.error.message, type: 'error' });
-        throw laboursRes.error;
+        // Fallback: Fetch labour and sites separately, and map in memory
+        const lRes = await supabase.from('labour').select('*').eq('is_archived', false).order('id', { ascending: false });
+        const sRes = await supabase.from('site').select('*');
+        if (!lRes.error) {
+          const siteMap = new Map(sRes.data?.map(s => [s.id, s]) || []);
+          labours = (lRes.data || []).map(l => ({
+            ...l,
+            site: l.site_id ? siteMap.get(l.site_id) : null
+          }));
+        } else {
+          console.error("Labour fetch fallback error:", lRes.error);
+          setSaveStatus({ saving: false, message: "Error fetching labours: " + lRes.error.message, type: 'error' });
+          throw lRes.error;
+        }
+      } else {
+        labours = laboursRes.data || [];
       }
-      
-      const labours = laboursRes.data || [];
       
       const [yearStr, monthStr] = selectedMonth.split('-');
       const currentYear = parseInt(yearStr);

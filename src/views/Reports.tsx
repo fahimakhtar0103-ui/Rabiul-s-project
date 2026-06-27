@@ -265,10 +265,44 @@ export function Reports() {
   };
 
   const getUniversalPaymentHistory = async () => {
-    const { data: payments, error: err1 } = await supabase.from('payment').select('*, labour(name, id_number)');
-    if (err1) throw err1;
-    const { data: monthly_settlement, error: err2 } = await supabase.from('monthly_settlement').select('*, labour(name, id_number)');
-    if (err2) throw err2;
+    let payments: any[] = [];
+    let monthly_settlement: any[] = [];
+
+    // Fetch payments
+    const paymentsRes = await supabase.from('payment').select('*, labour!labour_id(name, id_number)');
+    if (paymentsRes.error) {
+      // Fallback: Fetch payment and labour separately and map
+      const pRes = await supabase.from('payment').select('*');
+      if (pRes.error) throw pRes.error;
+      const lRes = await supabase.from('labour').select('id, name, id_number');
+      if (lRes.error) throw lRes.error;
+      
+      const labourMap = new Map(lRes.data.map(l => [l.id, l]));
+      payments = (pRes.data || []).map(p => ({
+        ...p,
+        labour: labourMap.get(p.labour_id) || null
+      }));
+    } else {
+      payments = paymentsRes.data || [];
+    }
+
+    // Fetch monthly settlements
+    const settlementRes = await supabase.from('monthly_settlement').select('*, labour!labour_id(name, id_number)');
+    if (settlementRes.error) {
+      // Fallback: Fetch settlement and labour separately and map
+      const msRes = await supabase.from('monthly_settlement').select('*');
+      if (msRes.error) throw msRes.error;
+      const lRes = await supabase.from('labour').select('id, name, id_number');
+      if (lRes.error) throw lRes.error;
+      
+      const labourMap = new Map(lRes.data.map(l => [l.id, l]));
+      monthly_settlement = (msRes.data || []).map(m => ({
+        ...m,
+        labour: labourMap.get(m.labour_id) || null
+      }));
+    } else {
+      monthly_settlement = settlementRes.data || [];
+    }
     
     let combined: any[] = [];
     if (payments) {

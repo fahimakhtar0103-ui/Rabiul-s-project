@@ -37,10 +37,29 @@ export function Profile({ worker, onNavigate }: Readonly<ProfileProps>) {
 
   const fetchProfile = async () => {
     try {
+      let labourData: any = null;
       const labourRes = await supabase.from('labour').select('*, site!site_id(*)').eq('id', worker.id).single();
+      if (labourRes.error) {
+        // Fallback: Fetch labour and then fetch site separately
+        const lRes = await supabase.from('labour').select('*').eq('id', worker.id).single();
+        if (!lRes.error) {
+          labourData = lRes.data;
+          if (labourData && labourData.site_id) {
+            const sRes = await supabase.from('site').select('*').eq('id', labourData.site_id).single();
+            if (!sRes.error) {
+              labourData.site = sRes.data;
+            }
+          }
+        } else {
+          throw lRes.error;
+        }
+      } else {
+        labourData = labourRes.data;
+      }
+
       const attendanceRes = await supabase.from('attendance').select('*').eq('labour_id', worker.id).order('year', { ascending: false }).order('month', { ascending: false });
       const paymentRes = await supabase.from('payment').select('*').eq('labour_id', worker.id).order('payment_date', { ascending: false });
-      const deductionRes = await supabase.from('deduction').select('*').eq('labour_id', worker.id).order('payment_date', { ascending: false });
+      const deductionRes = await supabase.from('deduction').select('*').eq('labour_id', worker.id).order('year', { ascending: false }).order('month', { ascending: false });
       
       let monthly_settlementRes: any = { data: [] };
       try {
@@ -49,10 +68,10 @@ export function Profile({ worker, onNavigate }: Readonly<ProfileProps>) {
         // Table might not exist yet if Settlement tab wasn't visited
       }
 
-      if (labourRes.data) {
+      if (labourData) {
         const labourWithSite = {
-          ...labourRes.data,
-          site_name: labourRes.data.site ? labourRes.data.site.name : null
+          ...labourData,
+          site_name: labourData.site ? labourData.site.name : null
         };
         setData({
           labour: labourWithSite,
