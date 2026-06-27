@@ -121,14 +121,19 @@ export function Profile({ worker, onNavigate }: Readonly<ProfileProps>) {
   const currentDeductions = deductions.filter(d => d.year.toString() === selectedYearStr && d.month.toString().padStart(2, '0') === selectedMonthStr);
 
   // Fetch compiled Monthly Entry for THIS month (from Settlement section)
-  const currentMonthlyEntry = monthly_settlement.find(m => m.month === selectedMonth);
+  const currentMonthlyEntry = monthly_settlement.find(m => {
+    if (m.year !== undefined && m.month !== undefined) {
+      return m.year.toString() === selectedYearStr && m.month.toString().padStart(2, '0') === selectedMonthStr;
+    }
+    return m.month === selectedMonth;
+  });
 
   // Combine manual inputs with bulk monthly entry stats
   const currentDays = currentDaysManual + (currentMonthlyEntry?.attendance_days || 0);
 
   const totalPaidThisMonth = currentPayments.reduce((sum, p) => sum + Number(p.amount), 0) + (currentMonthlyEntry?.total_payments || 0);
   const totalDeductedThisMonth = currentDeductions.reduce((sum, d) => sum + Number(d.ration_amount || 0) + Number(d.pocket_money_amount || 0) + Number(d.other_deduction_amount || 0), 0) + (currentMonthlyEntry?.total_deductions || 0);
-  const grossSalaryThisMonth = currentDays * Number(labour.daily_rate);
+  const grossSalaryThisMonth = (currentDaysManual * Number(labour.daily_rate)) + (Number(currentMonthlyEntry?.attendance_days || 0) * Number(currentMonthlyEntry?.daily_rate || labour.daily_rate));
 
   // Calculate PREVIOUS due (up to the end of last month)
   // Everything before selectedMonth
@@ -141,7 +146,12 @@ export function Profile({ worker, onNavigate }: Readonly<ProfileProps>) {
     const dDate = `${d.year}-${d.month.toString().padStart(2, '0')}-01`;
     return dDate < currentMonthDateStr;
   });
-  const previousMonthlyEntries = monthly_settlement.filter(m => `${m.month}-01` < currentMonthDateStr);
+  const previousMonthlyEntries = monthly_settlement.filter(m => {
+    const entryDateStr = (m.year !== undefined && m.month !== undefined)
+      ? `${m.year}-${m.month.toString().padStart(2, '0')}-01`
+      : `${m.month}-01`;
+    return entryDateStr < currentMonthDateStr;
+  });
 
   const prevGross = previousAttendance.reduce((sum, a) => sum + (Number(a.attendance_days) * Number(labour.daily_rate)), 0) 
     + previousMonthlyEntries.reduce((sum, m) => sum + (Number(m.attendance_days || 0) * Number(m.daily_rate || labour.daily_rate)), 0);

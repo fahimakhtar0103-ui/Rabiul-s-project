@@ -65,7 +65,13 @@ export function Reports() {
       const workers = labours.map((labour: any) => {
         // Current month
         const currentAttendance = attendanceData.find(a => a.labour_id === labour.id && a.year === year && a.month.toString().padStart(2, '0') === month);
-        const currentEntry = (monthly_settlementRes.data || []).find((m: any) => m.labour_id === labour.id && m.year === year && m.month === parseInt(month));
+        const currentEntry = (monthly_settlementRes.data || []).find((m: any) => {
+          if (m.labour_id !== labour.id) return false;
+          if (m.year !== undefined && m.month !== undefined) {
+            return Number(m.year) === year && Number(m.month) === parseInt(month);
+          }
+          return m.month === selectedMonth;
+        });
         const currentDays = (currentAttendance ? Number(currentAttendance.attendance_days) : 0) + (currentEntry ? Number(currentEntry.attendance_days || 0) : 0);
         
         const currentPayments = paymentData.filter(p => p.labour_id === labour.id && p.payment_date.toString().startsWith(selectedMonth));
@@ -97,8 +103,11 @@ export function Reports() {
           return dDate < currentMonthDateStr && d.labour_id === labour.id;
         });
         const prevEntries = (monthly_settlementRes.data || []).filter((m: any) => {
-          const mDate = `${m.year}-${m.month.toString().padStart(2, '0')}-01`;
-          return mDate < currentMonthDateStr && m.labour_id === labour.id;
+          if (m.labour_id !== labour.id) return false;
+          const entryDateStr = (m.year !== undefined && m.month !== undefined)
+            ? `${m.year}-${m.month.toString().padStart(2, '0')}-01`
+            : `${m.month}-01`;
+          return entryDateStr < currentMonthDateStr;
         });
 
         const myPrevAttendance = prevAttendance.filter(a => a.labour_id === labour.id);
@@ -111,7 +120,7 @@ export function Reports() {
 
         const previousDue = prevGross - prevPaid - prevDeducted;
 
-        const grossSalary = Number(labour.daily_rate) * currentDays;
+        const grossSalary = (Number(currentAttendance?.attendance_days || 0) * Number(labour.daily_rate)) + (Number(currentEntry?.attendance_days || 0) * Number(currentEntry?.daily_rate || labour.daily_rate));
         const totalDeds = ration + pocketMoney + otherDeductions;
         const netSalary = grossSalary - totalDeds;
         const closingDue = previousDue + netSalary - paymentsMade;

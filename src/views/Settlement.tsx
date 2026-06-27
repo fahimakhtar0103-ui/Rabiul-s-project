@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react';
-import { Search, Save, Download, FileSpreadsheet, AlertTriangle, CheckCircle2 } from 'lucide-react';
+import { Search, Save, Download, FileSpreadsheet, AlertTriangle, CheckCircle2, RefreshCw } from 'lucide-react';
 import { supabase } from '../lib/supabase';
 import * as XLSX from 'xlsx';
 import { useLanguage } from '../lib/LanguageContext';
@@ -86,7 +86,7 @@ export function Settlement() {
           name: labour.name,
           displayId: labour.id_number || 'NO ID',
           site: labour.site ? labour.site.name : 'Unassigned',
-          daily_rate: entry.daily_rate !== undefined ? Number(entry.daily_rate) : Number(labour.daily_rate),
+          daily_rate: (entry.daily_rate !== undefined && entry.daily_rate !== null && Number(entry.daily_rate) !== 0) ? Number(entry.daily_rate) : Number(labour.daily_rate || 0),
           attendance_days: entry.attendance_days || 0,
           ration: entry.ration_amount !== undefined ? Number(entry.ration_amount || 0) : Number(entry.ration || 0),
           pocket_money: entry.pocket_money_amount !== undefined ? Number(entry.pocket_money_amount || 0) : Number(entry.pocket_money || 0),
@@ -210,6 +210,34 @@ export function Settlement() {
     }
   };
 
+  const syncLatestRates = async () => {
+    if (dbError) return;
+    setLoading(true);
+    setSaveStatus({ saving: false, message: 'Syncing daily rates with Labour master list...', type: null });
+    try {
+      const laboursRes = await supabase.from('labour').select('id, daily_rate').eq('is_archived', false);
+      if (laboursRes.error) throw laboursRes.error;
+      
+      const rateMap = new Map(laboursRes.data.map(l => [l.id, l.daily_rate]));
+      
+      setWorkers(prev => prev.map(w => {
+        const freshRate = rateMap.get(w.id);
+        if (freshRate !== undefined && freshRate !== null && Number(freshRate) !== 0) {
+          return { ...w, daily_rate: Number(freshRate) };
+        }
+        return w;
+      }));
+      
+      setSaveStatus({ saving: false, message: 'Daily rates synced! Click "Save All" to save permanently.', type: 'success' });
+      setTimeout(() => setSaveStatus({ saving: false, message: '', type: null }), 5000);
+    } catch (err: any) {
+      console.error(err);
+      setSaveStatus({ saving: false, message: 'Sync error: ' + (err.message || 'Could not fetch master rates'), type: 'error' });
+    } finally {
+      setLoading(false);
+    }
+  };
+
   const filteredWorkers = workers.filter(w => w.name.toLowerCase().includes(searchQuery.toLowerCase()) || w.displayId.toLowerCase().includes(searchQuery.toLowerCase()));
 
   return (
@@ -275,6 +303,9 @@ export function Settlement() {
                  {saveStatus.message}
               </span>
             )}
+            <button onClick={syncLatestRates} className="flex-1 md:flex-none justify-center bg-surface-container hover:bg-surface-container-high text-on-surface px-4 py-2 border border-outline-variant/50 rounded-md font-semibold flex items-center gap-2 shadow-sm transition-all text-xs" disabled={dbError || saveStatus.saving || loading}>
+              <RefreshCw className={`w-4 h-4 text-primary ${loading ? 'animate-spin' : ''}`} /> Sync Latest Rates
+            </button>
             <button onClick={exportExcel} className="flex-1 md:flex-none justify-center bg-surface-container hover:bg-surface-container-high text-on-surface px-4 py-2 border border-outline-variant/50 rounded-md font-semibold flex items-center gap-2 shadow-sm transition-all text-xs" disabled={dbError || saveStatus.saving}>
               <FileSpreadsheet className="w-4 h-4 text-success" /> Export Excel
             </button>

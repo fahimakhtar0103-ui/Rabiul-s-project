@@ -111,10 +111,16 @@ export function Dashboard() {
         const currentDue = netSalary - totalPaid;
 
         // Current month payroll just based on attendance in this month (estimate)
-        const currMonthManualAtt = labAtt.find(a => a.year === currentYear && a.month === currentMonthInt);
-        const currMonthEntry = labEntries.find(m => m.month === currentMonthInt && m.year === currentYear);
+        const currMonthManualAtt = labAtt.find(a => Number(a.year) === currentYear && (Number(a.month) === currentMonthInt || a.month.toString() === currentMonthInt.toString().padStart(2, '0')));
+        const currMonthEntry = labEntries.find(m => {
+          if (m.year !== undefined && m.month !== undefined) {
+            return Number(m.month) === currentMonthInt && Number(m.year) === currentYear;
+          }
+          const targetStr = `${currentYear}-${currentMonthInt.toString().padStart(2, '0')}`;
+          return m.month === targetStr;
+        });
         const currDays = (currMonthManualAtt ? Number(currMonthManualAtt.attendance_days || 0) : 0) + (currMonthEntry ? Number(currMonthEntry.attendance_days || 0) : 0);
-        const currPayroll = currDays * Number(labour.daily_rate);
+        const currPayroll = currDays * Number(currMonthEntry?.daily_rate || labour.daily_rate || 0);
 
         currentPayroll += currPayroll;
         totalPendingDues += currentDue;
